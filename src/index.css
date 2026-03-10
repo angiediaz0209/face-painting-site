@@ -1,0 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Nunito', sans-serif;
+  background-color: #FFFDF7;
+  color: #1B2838;
+}
+
+h1, h2, h3 {
+  font-family: 'Fredoka One', cursive;
+}
+
+/* Fade-up animations handle their own opacity via keyframes + forwards fill */
+
+/* Service card hover */
+.card-lift {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.card-lift:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.1);
+}
+
+/* Gallery cards — slight tilt */
+.gallery-tilt-left {
+  transform: rotate(-1deg);
+  transition: transform 0.3s ease;
+}
+.gallery-tilt-right {
+  transform: rotate(1deg);
+  transition: transform 0.3s ease;
+}
+.gallery-tilt-left:hover,
+.gallery-tilt-right:hover {
+  transform: rotate(0deg) scale(1.02);
+}
+
+/* Focus states */
+input:focus, textarea:focus {
+  border-color: #9B5DE5 !important;
+  box-shadow: 0 0 0 3px rgba(155, 93, 229, 0.2);
+}
