@@ -12,8 +12,42 @@ function getAuthClient() {
 }
 
 /**
+ * Checks Google Calendar for existing events on a given date.
+ * Returns whether the date is available or has conflicts.
+ */
+export async function checkAvailability({ date }) {
+  const auth = getAuthClient();
+  const calendarId = process.env.GOOGLE_CALENDAR_ID;
+  const calendar = google.calendar({ version: 'v3', auth });
+
+  const timeMin = `${date}T00:00:00-08:00`;
+  const timeMax = `${date}T23:59:59-08:00`;
+
+  const result = await calendar.events.list({
+    calendarId,
+    timeMin,
+    timeMax,
+    singleEvents: true,
+    orderBy: 'startTime',
+  });
+
+  const events = result.data.items || [];
+  const hasConflict = events.length > 0;
+
+  return {
+    available: !hasConflict,
+    date,
+    existingEvents: events.map(e => ({
+      summary: e.summary,
+      start: e.start.dateTime || e.start.date,
+      end: e.end.dateTime || e.end.date,
+    })),
+  };
+}
+
+/**
  * Creates a Google Calendar event for a face painting booking.
- * Called internally by the chat handler when Sky triggers a booking.
+ * If pending=true, creates a [PENDING] event with orange color and no invite.
  */
 export async function createBooking(bookingData) {
   const {
@@ -28,19 +62,26 @@ export async function createBooking(bookingData) {
     location,
     quote,
     notes,
+    pending,
   } = bookingData;
 
   const auth = getAuthClient();
   const calendarId = process.env.GOOGLE_CALENDAR_ID;
   const calendar = google.calendar({ version: 'v3', auth });
 
-  // Build date-time strings (e.g. date="2026-03-22", startTime="14:00", endTime="16:00")
   const startDateTime = `${date}T${startTime}:00`;
   const endDateTime = `${date}T${endTime}:00`;
 
+  const isPending = pending === true;
+
   const event = {
-    summary: `Face Painting - ${clientName} (${eventType})`,
+    summary: isPending
+      ? `[PENDING] Face Painting - ${clientName} (${eventType})`
+      : `Face Painting - ${clientName} (${eventType})`,
     description: [
+      isPending ? '⚠️ AWAITING CONFIRMATION - Artist availability needs to be verified' : '',
+      isPending ? '⚠️ Client has NOT been sent a calendar invite yet' : '',
+      isPending ? '' : '',
       `Client: ${clientName}`,
       `Email: ${clientEmail}`,
       `Phone: ${clientPhone}`,
@@ -63,12 +104,19 @@ export async function createBooking(bookingData) {
       dateTime: endDateTime,
       timeZone: 'America/Los_Angeles',
     },
-    attendees: [{ email: clientEmail, displayName: clientName }],
+    // Google Calendar color IDs: 6 = orange (pending), 10 = green (confirmed)
+    colorId: isPending ? '6' : '10',
+    // Only add attendee and send invite if NOT pending
+    ...(isPending
+      ? {}
+      : {
+          attendees: [{ email: clientEmail, displayName: clientName }],
+        }),
     reminders: {
       useDefault: false,
       overrides: [
-        { method: 'email', minutes: 24 * 60 }, // 1 day before
-        { method: 'email', minutes: 48 * 60 }, // 2 days before
+        { method: 'email', minutes: 24 * 60 },
+        { method: 'email', minutes: 48 * 60 },
       ],
     },
   };
@@ -76,11 +124,13 @@ export async function createBooking(bookingData) {
   const result = await calendar.events.insert({
     calendarId,
     resource: event,
-    sendUpdates: 'all', // Sends email invite to the client
+    // Only send updates (calendar invite) if NOT pending
+    sendUpdates: isPending ? 'none' : 'all',
   });
 
   return {
     success: true,
+    pending: isPending,
     eventId: result.data.id,
     htmlLink: result.data.htmlLink,
     summary: event.summary,

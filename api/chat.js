@@ -1,12 +1,27 @@
 import Anthropic from "@anthropic-ai/sdk";
 import SKY_SYSTEM_PROMPT from "./sky-system-prompt.js";
-import { createBooking } from "./book.js";
+import { createBooking, checkAvailability } from "./book.js";
 
-// Tool definition for Sky to create bookings
+const AVAILABILITY_TOOL = {
+  name: "check_availability",
+  description:
+    "Checks Google Calendar for existing events on a specific date. Use this BEFORE creating a booking to check if the date is available. Returns whether the date is free or has existing events.",
+  input_schema: {
+    type: "object",
+    properties: {
+      date: {
+        type: "string",
+        description: "Date to check in YYYY-MM-DD format (e.g. 2026-04-15)",
+      },
+    },
+    required: ["date"],
+  },
+};
+
 const BOOKING_TOOL = {
   name: "create_booking",
   description:
-    "Creates a face painting booking on Google Calendar and sends the client a calendar invitation. Use this when you have collected all required information from the client: name, email, date, start time, end time, event type, guest count, location, and quote.",
+    "Creates a face painting booking on Google Calendar. If the date is available, creates a confirmed booking and sends the client a calendar invitation. If the date has a conflict (busy), set pending=true to create a [PENDING] booking without sending the client an invite — the team will confirm manually.",
   input_schema: {
     type: "object",
     properties: {
@@ -56,6 +71,11 @@ const BOOKING_TOOL = {
         description:
           "Any special requests, themes, or additional notes from the client",
       },
+      pending: {
+        type: "boolean",
+        description:
+          "Set to true when the date has a conflict and you need to create a pending booking for team review. When false or omitted, creates a confirmed booking with calendar invite.",
+      },
     },
     required: [
       "clientName",
@@ -72,6 +92,68 @@ const BOOKING_TOOL = {
   },
 };
 
+const TOOLS = [AVAILABILITY_TOOL, BOOKING_TOOL];
+
+async function handleToolUse(toolUse) {
+  if (toolUse.name === "check_availability") {
+    try {
+      const result = await checkAvailability(toolUse.input);
+      return {
+        type: "tool_result",
+        tool_use_id: toolUse.id,
+        content: JSON.stringify(result),
+      };
+    } catch (error) {
+      console.error("Availability check error:", error);
+      return {
+        type: "tool_result",
+        tool_use_id: toolUse.id,
+        content: JSON.stringify({
+          available: true,
+          date: toolUse.input.date,
+          existingEvents: [],
+          error: "Could not check availability, proceed with booking.",
+        }),
+      };
+    }
+  }
+
+  if (toolUse.name === "create_booking") {
+    try {
+      const bookingResult = await createBooking(toolUse.input);
+      const isPending = bookingResult.pending;
+      return {
+        type: "tool_result",
+        tool_use_id: toolUse.id,
+        content: JSON.stringify({
+          success: true,
+          pending: isPending,
+          message: isPending
+            ? `Pending booking created for ${bookingResult.summary}, Date: ${bookingResult.start}. The team will review and confirm with the client by text at ${toolUse.input.clientPhone}.`
+            : `Booking confirmed! Event: ${bookingResult.summary}, Date: ${bookingResult.start}. Calendar invite sent to ${toolUse.input.clientEmail}.`,
+        }),
+      };
+    } catch (error) {
+      console.error("Booking error:", error);
+      return {
+        type: "tool_result",
+        tool_use_id: toolUse.id,
+        content: JSON.stringify({
+          success: false,
+          message:
+            "Sorry, there was an issue creating the booking. Please ask the client to text 415-991-9374 to confirm.",
+        }),
+      };
+    }
+  }
+
+  return {
+    type: "tool_result",
+    tool_use_id: toolUse.id,
+    content: JSON.stringify({ error: "Unknown tool" }),
+  };
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -87,7 +169,7 @@ export default async function handler(req, res) {
     const client = new Anthropic();
     const recentHistory = conversationHistory.slice(-10);
 
-    const messages = [
+    let messages = [
       ...recentHistory.map((msg) => ({
         role: msg.role || (msg.type === "user" ? "user" : "assistant"),
         content: msg.content || msg.text,
@@ -95,60 +177,40 @@ export default async function handler(req, res) {
       { role: "user", content: message },
     ];
 
-    // First call — may return text or a tool_use request
+    // Loop to handle multiple tool calls (check availability → then book)
     let response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 1024,
       system: SKY_SYSTEM_PROMPT,
-      tools: [BOOKING_TOOL],
+      tools: TOOLS,
       messages: messages,
     });
 
-    // Check if Sky wants to create a booking
-    if (response.stop_reason === "tool_use") {
+    // Handle up to 3 rounds of tool use (availability check + booking + confirmation)
+    let rounds = 0;
+    while (response.stop_reason === "tool_use" && rounds < 3) {
+      rounds++;
       const toolUse = response.content.find(
         (block) => block.type === "tool_use"
       );
 
-      if (toolUse && toolUse.name === "create_booking") {
-        let toolResult;
+      if (!toolUse) break;
 
-        try {
-          const bookingResult = await createBooking(toolUse.input);
-          toolResult = {
-            type: "tool_result",
-            tool_use_id: toolUse.id,
-            content: JSON.stringify({
-              success: true,
-              message: `Booking created successfully! Event: ${bookingResult.summary}, Date: ${bookingResult.start}. Calendar invite sent to ${toolUse.input.clientEmail}.`,
-            }),
-          };
-        } catch (error) {
-          console.error("Booking error:", error);
-          toolResult = {
-            type: "tool_result",
-            tool_use_id: toolUse.id,
-            content: JSON.stringify({
-              success: false,
-              message:
-                "Sorry, there was an issue creating the booking. Please ask the client to text 415-991-9374 to confirm.",
-            }),
-          };
-        }
+      const toolResult = await handleToolUse(toolUse);
 
-        // Send tool result back to Claude so Sky can confirm to the client
-        response = await client.messages.create({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1024,
-          system: SKY_SYSTEM_PROMPT,
-          tools: [BOOKING_TOOL],
-          messages: [
-            ...messages,
-            { role: "assistant", content: response.content },
-            { role: "user", content: [toolResult] },
-          ],
-        });
-      }
+      messages = [
+        ...messages,
+        { role: "assistant", content: response.content },
+        { role: "user", content: [toolResult] },
+      ];
+
+      response = await client.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1024,
+        system: SKY_SYSTEM_PROMPT,
+        tools: TOOLS,
+        messages: messages,
+      });
     }
 
     // Extract text from the final response
