@@ -32,6 +32,8 @@ export async function createBooking(bookingData) {
 
   const auth = getAuthClient();
   const calendarId = process.env.GOOGLE_CALENDAR_ID;
+  console.log('DEBUG calendarId:', calendarId ? `"${calendarId}"` : 'MISSING');
+  console.log('DEBUG env keys:', Object.keys(process.env).filter(k => k.startsWith('GOOGLE')));
   const calendar = google.calendar({ version: 'v3', auth });
 
   // Build date-time strings (e.g. date="2026-03-22", startTime="14:00", endTime="16:00")
