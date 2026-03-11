@@ -1,6 +1,6 @@
-import { MessageIcon, CalendarIcon } from './Icons';
+import { MessageIcon, PaletteIcon } from './Icons';
 
-export default function Contact() {
+export default function Contact({ onOpenChat }) {
   return (
     <section id="contact" className="py-14 sm:py-20 bg-white">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -22,18 +22,16 @@ export default function Contact() {
             <p className="font-display text-navy mb-1 group-hover:text-coral transition text-lg">Text Us</p>
             <p className="text-coral font-body font-bold text-lg">415-991-9374</p>
           </a>
-          <a
-            href="https://calendly.com/steff-diaz0209/30min"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="card-lift bg-teal/5 border-2 border-teal/20 rounded-2xl p-6 sm:p-8 group"
+          <button
+            onClick={onOpenChat}
+            className="card-lift bg-teal/5 border-2 border-teal/20 rounded-2xl p-6 sm:p-8 group text-center cursor-pointer"
           >
             <div className="w-14 h-14 bg-teal rounded-full flex items-center justify-center mx-auto mb-4">
-              <CalendarIcon className="w-7 h-7 text-white" />
+              <PaletteIcon className="w-7 h-7 text-white" />
             </div>
-            <p className="font-display text-navy mb-1 group-hover:text-teal transition text-lg">Separe Your Date</p>
-            <p className="text-teal font-body font-bold text-lg">Schedule on Calendly</p>
-          </a>
+            <p className="font-display text-navy mb-1 group-hover:text-teal transition text-lg">Get an Instant Quote</p>
+            <p className="text-teal font-body font-bold text-lg">Chat with Sky</p>
+          </button>
         </div>
 
         <div>

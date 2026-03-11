@@ -28,10 +28,8 @@ export default function ChatWidget({ onClose }) {
     }
   }, []);
 
-  const sendMessage = async () => {
-    if (!input.trim() || isLoading) return;
-    const userMessage = input.trim();
-    setInput('');
+  const sendMessageText = async (userMessage) => {
+    if (isLoading) return;
     const updatedMessages = [...messages, { role: 'user', content: userMessage }];
     setMessages(updatedMessages);
     setIsLoading(true);
@@ -52,6 +50,13 @@ export default function ChatWidget({ onClose }) {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const sendMessage = async () => {
+    if (!input.trim() || isLoading) return;
+    const userMessage = input.trim();
+    setInput('');
+    sendMessageText(userMessage);
   };
 
   const handleKeyDown = (e) => {
@@ -110,14 +115,13 @@ export default function ChatWidget({ onClose }) {
 
         {/* Action Buttons */}
         <div className="px-3 py-1.5 flex gap-2 border-t border-navy/5 shrink-0 bg-white">
-          <a
-            href="https://calendly.com/steff-diaz0209/30min"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 bg-teal hover:bg-teal-dark text-white text-center text-xs font-body font-bold py-2 rounded-full transition-colors"
+          <button
+            onClick={() => sendMessageText("I'd like to book my event!")}
+            disabled={isLoading}
+            className="flex-1 bg-teal hover:bg-teal-dark text-white text-center text-xs font-body font-bold py-2 rounded-full transition-colors disabled:opacity-50"
           >
             Book Now
-          </a>
+          </button>
           <a
             href="sms:4159919374"
             className="flex-1 bg-coral/10 hover:bg-coral/20 text-navy text-center text-xs font-body font-bold py-2 rounded-full transition-colors"

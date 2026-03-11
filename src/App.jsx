@@ -7,7 +7,7 @@ import Reviews from './components/Reviews';
 import FAQ from './components/FAQ';
 import Contact from './components/Contact';
 import ChatWidget from './components/ChatWidget';
-import { ShieldCheckIcon, StarIcon, HeartIcon, PaletteIcon, MessageIcon } from './components/Icons';
+import { StarIcon, HeartIcon, PaletteIcon, MessageIcon } from './components/Icons';
 import birthdayImg from './assets/designs/services/birthday.png';
 import setupImg from './assets/designs/services/setup.jpg';
 import festivalImg from './assets/designs/services/festival.png';
@@ -89,16 +89,6 @@ export default function App() {
         <section className="bg-white py-5 sm:py-6 shadow-sm">
           <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row gap-4 sm:gap-8 justify-center items-center">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 bg-mint/15 rounded-full flex items-center justify-center">
-                <ShieldCheckIcon className="w-5 h-5 text-mint" />
-              </div>
-              <div>
-                <span className="font-body font-bold text-navy text-sm block">Fully Insured</span>
-                <span className="font-body text-gray text-xs">Peace of mind for your event</span>
-              </div>
-            </div>
-            <div className="hidden sm:block w-px h-10 bg-gray-light" />
-            <div className="flex items-center gap-2.5">
               <div className="w-9 h-9 bg-coral/15 rounded-full flex items-center justify-center">
                 <HeartIcon className="w-5 h-5 text-coral" />
               </div>
@@ -155,7 +145,7 @@ export default function App() {
         <Reviews />
         <Clients />
         <FAQ />
-        <Contact />
+        <Contact onOpenChat={() => setIsChatOpen(true)} />
 
         {/* Floating Chat Button */}
         {!isChatOpen && (
