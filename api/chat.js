@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import getSkySystemPrompt from "./sky-system-prompt.js";
 import { createBooking, checkAvailability } from "./book.js";
 import { sendBookingNotification } from "./notify.js";
+import { addBookingToSheet } from "./sheets.js";
 
 const AVAILABILITY_TOOL = {
   name: "check_availability",
@@ -129,6 +130,11 @@ async function handleToolUse(toolUse) {
         console.error("Notification error:", err)
       );
 
+      // Add booking to Google Sheet (non-blocking)
+      addBookingToSheet(toolUse.input, bookingResult).catch((err) =>
+        console.error("Sheet error:", err)
+      );
+
       return {
         type: "tool_result",
         tool_use_id: toolUse.id,
@@ -177,10 +183,12 @@ export default async function handler(req, res) {
     const recentHistory = conversationHistory.slice(-10);
 
     let messages = [
-      ...recentHistory.map((msg) => ({
-        role: msg.role || (msg.type === "user" ? "user" : "assistant"),
-        content: msg.content || msg.text,
-      })),
+      ...recentHistory
+        .map((msg) => ({
+          role: msg.role || (msg.type === "user" ? "user" : "assistant"),
+          content: msg.content || msg.text || "",
+        }))
+        .filter((msg) => msg.content),
       { role: "user", content: message },
     ];
 
