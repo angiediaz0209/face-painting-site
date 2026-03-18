@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
-import SKY_SYSTEM_PROMPT from "./sky-system-prompt.js";
+import getSkySystemPrompt from "./sky-system-prompt.js";
 import { createBooking, checkAvailability } from "./book.js";
+import { sendBookingNotification } from "./notify.js";
 
 const AVAILABILITY_TOOL = {
   name: "check_availability",
@@ -122,6 +123,12 @@ async function handleToolUse(toolUse) {
     try {
       const bookingResult = await createBooking(toolUse.input);
       const isPending = bookingResult.pending;
+
+      // Send email notification to admin (non-blocking)
+      sendBookingNotification(toolUse.input, bookingResult).catch((err) =>
+        console.error("Notification error:", err)
+      );
+
       return {
         type: "tool_result",
         tool_use_id: toolUse.id,
@@ -177,14 +184,31 @@ export default async function handler(req, res) {
       { role: "user", content: message },
     ];
 
+    // Helper: call Claude with automatic retry on 529 overloaded errors
+    async function callClaude(msgs) {
+      const maxRetries = 3;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          return await client.messages.create({
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 1024,
+            system: getSkySystemPrompt(),
+            tools: TOOLS,
+            messages: msgs,
+          });
+        } catch (err) {
+          if (err.status === 529 && attempt < maxRetries) {
+            // Wait 2s, 4s before retrying
+            await new Promise((r) => setTimeout(r, attempt * 2000));
+            continue;
+          }
+          throw err;
+        }
+      }
+    }
+
     // Loop to handle multiple tool calls (check availability → then book)
-    let response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1024,
-      system: SKY_SYSTEM_PROMPT,
-      tools: TOOLS,
-      messages: messages,
-    });
+    let response = await callClaude(messages);
 
     // Handle up to 3 rounds of tool use (availability check + booking + confirmation)
     let rounds = 0;
@@ -204,13 +228,7 @@ export default async function handler(req, res) {
         { role: "user", content: [toolResult] },
       ];
 
-      response = await client.messages.create({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1024,
-        system: SKY_SYSTEM_PROMPT,
-        tools: TOOLS,
-        messages: messages,
-      });
+      response = await callClaude(messages);
     }
 
     // Extract text from the final response
