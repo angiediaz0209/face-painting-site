@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { MinusIcon } from './Icons';
 
 const API_URL = '/api';
 
@@ -72,31 +73,40 @@ export default function ChatWidget({ onClose }) {
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-[calc(100vw-2rem)] max-w-sm">
-      <div className="bg-white rounded-2xl shadow-2xl h-[480px] flex flex-col overflow-hidden border border-navy/10">
+    <div className="fixed z-50 right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] sm:bottom-4 w-[calc(100vw-2rem)] max-w-sm">
+      <div className="bg-white shadow-2xl h-[min(70vh,480px)] flex flex-col overflow-hidden border border-navy/10 rounded-2xl">
         {/* Header */}
-        <div className="bg-gradient-to-r from-magenta via-purple to-teal p-3.5 text-white flex items-center justify-between shrink-0 rounded-t-2xl">
+        <div className="bg-gradient-to-br from-coral to-salmon p-3.5 text-white flex items-center justify-between shrink-0 rounded-t-2xl">
           <div>
             <h3 className="font-display text-base">Chat with Sky</h3>
             <p className="text-white/80 font-body text-xs">Face Painting California</p>
           </div>
-          <div className="flex items-center gap-3">
-            <button onClick={clearChat} className="text-white/70 hover:text-white font-body text-xs underline">
-              New
+          <div className="flex items-center gap-2">
+            <button
+              onClick={clearChat}
+              title="Start a new conversation"
+              className="text-white/80 hover:text-white font-body text-xs font-bold px-2.5 py-1.5 rounded-full hover:bg-white/15 transition-colors"
+            >
+              New chat
             </button>
-            <button onClick={onClose} className="text-white/80 hover:text-white text-xl leading-none font-bold">
-              &times;
+            <button
+              onClick={onClose}
+              title="Minimize — your conversation stays saved"
+              aria-label="Minimize chat"
+              className="flex items-center justify-center w-8 h-8 text-white rounded-full bg-white/15 hover:bg-white/25 transition-colors"
+            >
+              <MinusIcon className="w-5 h-5" />
             </button>
           </div>
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2.5 bg-cream">
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2.5 bg-cream">
           {messages.map((msg, i) => (
             <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 font-body text-sm whitespace-pre-wrap ${
                 msg.role === 'user'
-                  ? 'bg-purple text-white rounded-br-sm'
+                  ? 'bg-coral text-white rounded-br-sm'
                   : 'bg-white text-navy rounded-bl-sm shadow-sm'
               }`}>
                 {msg.content}
@@ -118,7 +128,7 @@ export default function ChatWidget({ onClose }) {
           <button
             onClick={() => sendMessageText("I'd like to book my event!")}
             disabled={isLoading}
-            className="flex-1 bg-teal hover:bg-teal-dark text-white text-center text-xs font-body font-bold py-2 rounded-full transition-colors disabled:opacity-50"
+            className="flex-1 bg-salmon hover:bg-salmon-dark text-white text-center text-xs font-body font-bold py-2 rounded-full transition-colors disabled:opacity-50"
           >
             Book Now
           </button>
@@ -144,11 +154,14 @@ export default function ChatWidget({ onClose }) {
             <button
               onClick={sendMessage}
               disabled={isLoading || !input.trim()}
-              className="bg-magenta hover:bg-coral text-white rounded-full px-4 py-2 text-sm font-body font-bold disabled:opacity-50 transition-colors"
+              className="bg-coral hover:bg-coral-dark text-white rounded-full px-4 py-2 text-sm font-body font-bold disabled:opacity-50 transition-colors"
             >
               Send
             </button>
           </div>
+          <p className="text-center text-navy/40 font-body text-[11px] mt-2">
+            Minimize anytime — your conversation stays saved here 💬
+          </p>
         </div>
       </div>
     </div>

@@ -140,19 +140,8 @@ export async function createBooking(bookingData) {
 }
 
 // Vercel serverless handler (for direct API calls if needed)
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  try {
-    const result = await createBooking(req.body);
-    return res.status(200).json(result);
-  } catch (error) {
-    console.error('Booking error:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to create booking. Please text us at 415-991-9374.',
-    });
-  }
-}
+// NOTE: This module intentionally exposes NO public HTTP handler.
+// Bookings are created only through the Sky assistant flow in api/chat.js,
+// which imports createBooking()/checkAvailability() directly. Exporting a
+// default handler here would create an unauthenticated /api/book endpoint that
+// anyone could POST to in order to spam the real Google Calendar.

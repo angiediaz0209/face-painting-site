@@ -8,47 +8,69 @@ import unicornImg from '../assets/designs/unicorn.jpg';
 import superheroImg from '../assets/designs/superhero-new.jpg';
 import skullImg from '../assets/designs/skull-art.jpg';
 import birthdayImg from '../assets/designs/birthday.jpg';
-import schoolImg from '../assets/designs/school-carnival.jpg';
 import setupImg from '../assets/designs/setup.jpg';
 
 const galleryImages = [
-  { src: butterflyImg, alt: 'Butterfly face paint' },
-  { src: tigerImg, alt: 'Tiger face paint' },
-  { src: princessImg, alt: 'Princess face paint' },
-  { src: rainbowImg, alt: 'Rainbow face paint' },
-  { src: unicornImg, alt: 'Unicorn face paint' },
-  { src: superheroImg, alt: 'Superhero face paint' },
-  { src: skullImg, alt: 'Skull art face paint' },
-  { src: birthdayImg, alt: 'Birthday party face painting' },
-  { src: schoolImg, alt: 'School carnival face painting' },
-  { src: setupImg, alt: 'Face painting setup' },
+  { src: butterflyImg, alt: 'Butterfly face paint', label: 'butterfly face design' },
+  { src: tigerImg, alt: 'Tiger face paint', label: 'tiger face design' },
+  { src: princessImg, alt: 'Princess face paint', label: 'mermaid face design' },
+  { src: rainbowImg, alt: 'Rainbow face paint', label: 'rainbow face design' },
+  { src: unicornImg, alt: 'Unicorn face paint', label: 'unicorn face design' },
+  { src: superheroImg, alt: 'Superhero face paint', label: 'spiderman face design' },
+  { src: skullImg, alt: 'Skull art face paint', label: 'skeleton face design' },
+  { src: birthdayImg, alt: 'Birthday party face painting', label: 'fairy face design' },
+  { src: setupImg, alt: 'Face painting setup', label: 'paint kit photo' },
 ];
 
 export default function Gallery() {
   const [lightboxImg, setLightboxImg] = useState(null);
 
   return (
-    <section id="gallery" className="py-14 sm:py-20 bg-sunshine/10">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <h2 className="text-3xl sm:text-4xl font-display text-center text-navy mb-3">
-          Sneak Peek
+    <section id="gallery" className="relative py-14 sm:py-24 bg-cream overflow-hidden">
+      {/* pastel blob accent */}
+      <div className="absolute top-6 right-8 w-40 h-40 bg-purple/20 rounded-full" />
+
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        <h2 className="text-4xl sm:text-5xl font-display text-center text-navy mb-3">
+          Sneak{' '}
+          <span className="relative inline-block text-coral font-script font-bold pr-1">
+            Peek
+            <svg
+              className="absolute left-0 -bottom-2 w-full"
+              viewBox="0 0 120 14"
+              fill="none"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M4 9C30 4 60 4 90 7C102 8 110 9 116 6"
+                stroke="#FFD93D"
+                strokeWidth="5"
+                strokeLinecap="round"
+              />
+            </svg>
+          </span>
         </h2>
-        <p className="text-center text-navy/50 font-body mb-10">
+        <p className="text-center text-navy/50 font-body text-lg mb-12">
           Discover magical designs for every occasion.
         </p>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
           {galleryImages.map((img, i) => (
             <button
               key={i}
               onClick={() => setLightboxImg(img)}
-              className={`${i % 2 === 0 ? 'gallery-tilt-left' : 'gallery-tilt-right'} rounded-2xl overflow-hidden shadow-md cursor-pointer`}
+              style={{ transform: `rotate(${[-2, 1.5, -1, 2, -1.5, 1][i % 6]}deg)` }}
+              className="group relative rounded-3xl overflow-hidden shadow-[0_12px_24px_rgba(27,40,56,0.12)] cursor-pointer transition-transform duration-300 hover:rotate-0 hover:scale-[1.03]"
             >
               <img
                 src={img.src}
                 alt={img.alt}
-                className="w-full h-44 sm:h-56 object-cover"
+                className="w-full h-56 sm:h-64 object-cover"
               />
+              <span className="absolute left-1/2 bottom-5 -translate-x-1/2 whitespace-nowrap bg-white text-navy font-mono text-xs sm:text-sm px-3 py-1.5 rounded-md shadow-md">
+                {img.label}
+              </span>
             </button>
           ))}
         </div>

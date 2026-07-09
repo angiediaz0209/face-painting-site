@@ -3,7 +3,6 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import handler from './api/chat.js';
-import bookHandler from './api/book.js';
 
 // Load .env.local into process.env
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -49,7 +48,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if ((req.url === '/api/chat' || req.url === '/api/book') && req.method === 'POST') {
+  if (req.url === '/api/chat' && req.method === 'POST') {
     let body = '';
     req.on('data', (chunk) => {
       body += chunk.toString();
@@ -57,11 +56,7 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       req.body = JSON.parse(body);
       addHelpers(res);
-      if (req.url === '/api/book') {
-        bookHandler(req, res);
-      } else {
-        handler(req, res);
-      }
+      handler(req, res);
     });
   } else {
     res.writeHead(404, { 'Content-Type': 'application/json' });

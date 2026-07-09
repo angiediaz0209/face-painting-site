@@ -8,3 +8,4 @@ dist
 google-credentials.json
 oauth-credentials.json
 get-oauth-token.js
+SKY_INSTRUCTIONS.md

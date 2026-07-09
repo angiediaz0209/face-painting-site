@@ -9,6 +9,8 @@ export default {
       colors: {
         coral: '#FF6B6B',
         'coral-dark': '#E85555',
+        salmon: '#FF8C73',
+        'salmon-dark': '#F0745C',
         orange: '#FF8C42',
         'orange-dark': '#E67A30',
         sunshine: '#FFD93D',
@@ -27,6 +29,7 @@ export default {
       fontFamily: {
         display: ['"Fredoka One"', 'cursive'],
         body: ['"Nunito"', 'sans-serif'],
+        script: ['"Caveat"', 'cursive'],
       },
       keyframes: {
         'fade-up': {

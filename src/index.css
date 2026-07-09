@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Caveat:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,12 +6,29 @@
 
 html {
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   font-family: 'Nunito', sans-serif;
   background-color: #FFFDF7;
   color: #1B2838;
+  /* Remove the grey tap flash for a native-app feel */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Anchored sections clear the sticky header when jumped to */
+[id] {
+  scroll-margin-top: 72px;
+}
+
+/* Prevent iOS from zooming in when focusing form fields on mobile */
+@media (max-width: 640px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
 }
 
 h1, h2, h3 {

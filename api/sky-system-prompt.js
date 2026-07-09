@@ -4,8 +4,24 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const SKY_INSTRUCTIONS_PATH = path.join(__dirname, '..', 'SKY_INSTRUCTIONS.md');
-const skyInstructions = fs.readFileSync(SKY_INSTRUCTIONS_PATH, 'utf-8');
+// Sky's instructions contain private pricing/business rules and are kept OUT of
+// the git repo. In production they are supplied via the SKY_INSTRUCTIONS env var
+// (set in the Vercel dashboard); for local development they fall back to the
+// gitignored SKY_INSTRUCTIONS.md file.
+function loadSkyInstructions() {
+  if (process.env.SKY_INSTRUCTIONS && process.env.SKY_INSTRUCTIONS.trim()) {
+    return process.env.SKY_INSTRUCTIONS;
+  }
+  try {
+    return fs.readFileSync(path.join(__dirname, '..', 'SKY_INSTRUCTIONS.md'), 'utf-8');
+  } catch {
+    throw new Error(
+      'Sky instructions missing: set the SKY_INSTRUCTIONS environment variable (production) or add SKY_INSTRUCTIONS.md locally (development).'
+    );
+  }
+}
+
+const skyInstructions = loadSkyInstructions();
 
 export default function getSkySystemPrompt() {
   // Get current date/time in Pacific Time reliably

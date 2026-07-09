@@ -43,41 +43,69 @@ const services = [
 export default function App() {
   const [isChatOpen, setIsChatOpen] = useState(false);
 
+  // True once the visitor has sent at least one message — their chat is saved and can be resumed.
+  const hasConversation = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('sky-chat-history') || '[]').some((m) => m.role === 'user');
+    } catch {
+      return false;
+    }
+  })();
+
   return (
     <div className="min-h-screen bg-cream overflow-x-hidden">
       <Header onGetQuote={() => setIsChatOpen(true)} />
 
       <main>
         {/* Hero Section */}
-        <section className="relative bg-navy text-white py-20 sm:py-32 overflow-hidden">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-coral/20 rounded-full -mr-48 -mt-48" />
-          <div className="absolute bottom-0 left-0 w-72 h-72 bg-purple/20 rounded-full -ml-36 -mb-36" />
-          <div className="absolute top-1/2 left-1/2 w-60 h-60 bg-teal/10 rounded-full -ml-80 -mt-20" />
+        <section className="relative bg-cream text-navy py-20 sm:py-32 overflow-hidden">
+          {/* Playful pastel blobs */}
+          <div className="absolute top-0 left-0 w-72 h-72 bg-teal/25 rounded-full -ml-20 -mt-24 animate-float" />
+          <div className="absolute top-1/4 right-0 w-96 h-96 bg-purple/25 rounded-full -mr-32" />
+          <div className="absolute bottom-0 left-8 w-72 h-72 bg-sunshine/40 rounded-full -mb-24 animate-float" style={{ animationDelay: '1.5s' }} />
 
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
-            <div className="inline-block bg-white/10 backdrop-blur-sm px-5 py-2 rounded-full mb-6 border border-white/20">
-              <p className="text-sm sm:text-base font-body font-semibold text-white/90">Trusted Face Painting Across the Bay Area</p>
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
+            <div className="inline-flex items-center gap-2 bg-white px-5 py-2 rounded-full mb-8 border-2 border-coral shadow-sm">
+              <span className="text-coral">✦</span>
+              <p className="text-sm sm:text-base font-body font-extrabold text-coral tracking-wide">Trusted Face Painting Across the Bay Area</p>
             </div>
 
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-display mb-6 leading-tight">
+            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-display mb-6 leading-[1.05] text-navy">
               Turning Little Faces<br />
-              into <span className="text-sunshine italic">Masterpieces</span>
+              into{' '}
+              <span className="relative inline-block text-coral font-script font-bold pr-2">
+                Masterpieces
+                <svg
+                  className="absolute left-0 -bottom-3 w-full"
+                  viewBox="0 0 300 16"
+                  fill="none"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M4 10C60 4 120 4 180 8C220 10.5 260 12 296 6"
+                    stroke="#FFD93D"
+                    strokeWidth="5"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </span>
             </h1>
 
-            <p className="text-base sm:text-lg mb-10 max-w-2xl mx-auto text-white/80 font-body leading-relaxed">
+            <p className="text-base sm:text-xl mb-10 max-w-2xl mx-auto text-navy-light font-body leading-relaxed">
               Professional, safe, and magical face painting for birthdays, festivals, and corporate events.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button
                 onClick={() => setIsChatOpen(true)}
-                className="bg-coral hover:bg-coral-dark text-white font-body font-extrabold py-3.5 px-10 rounded-full text-lg transition-all hover:shadow-lg active:scale-95"
+                className="bg-coral hover:bg-coral-dark text-white font-body font-extrabold py-3.5 px-10 rounded-full text-lg transition-all shadow-[0_5px_0_#E85555] hover:shadow-[0_3px_0_#E85555] hover:translate-y-0.5 active:translate-y-1 active:shadow-[0_1px_0_#E85555]"
               >
-                Book Now
+                🎨 Book Now
               </button>
               <a
                 href="#services"
-                className="bg-white/10 hover:bg-white/20 border-2 border-white/30 text-white font-body font-bold py-3.5 px-10 rounded-full transition-all text-lg backdrop-blur-sm"
+                className="bg-white hover:bg-cream border-2 border-teal text-navy font-body font-extrabold py-3.5 px-10 rounded-full transition-all text-lg shadow-sm hover:shadow-md"
               >
                 View Services
               </a>
@@ -151,10 +179,17 @@ export default function App() {
         {!isChatOpen && (
           <button
             onClick={() => setIsChatOpen(true)}
-            className="fixed bottom-5 right-5 sm:bottom-6 sm:right-6 bg-magenta hover:bg-coral text-white font-body font-bold p-4 sm:py-3.5 sm:px-6 rounded-full shadow-lg hover:shadow-xl flex items-center gap-2 z-40 transition-all active:scale-95"
+            className="fixed right-6 bottom-[calc(env(safe-area-inset-bottom)+1.5rem)] bg-coral hover:bg-salmon text-white font-body font-bold p-4 sm:py-3.5 sm:px-6 rounded-full shadow-lg hover:shadow-xl flex items-center gap-2 z-40 transition-all active:scale-95"
           >
-            <MessageIcon className="w-5 h-5" />
-            <span className="hidden sm:inline text-sm">Chat with Sky</span>
+            <span className="relative flex">
+              <MessageIcon className="w-5 h-5" />
+              {hasConversation && (
+                <span className="absolute -top-1.5 -right-1.5 w-2.5 h-2.5 bg-mint rounded-full ring-2 ring-white" />
+              )}
+            </span>
+            <span className="hidden sm:inline text-sm">
+              {hasConversation ? 'Continue chat' : 'Chat with Sky'}
+            </span>
           </button>
         )}
       </main>
