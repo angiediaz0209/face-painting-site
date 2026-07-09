@@ -24,7 +24,7 @@ export default function ChatWidget({ onClose }) {
     if (messages.length === 0) {
       setMessages([{
         role: 'assistant',
-        content: "Hi! I'm Sky, the Face Painting California assistant! 🎨\nI'm here to help make your event extra special.\nWhat are we celebrating? I'd love to put together the perfect quote for you! 🎉"
+        content: "Hey! I'm Sky with Face Painting California 🎨\nWhat are you celebrating? Tell me a bit about it and I'll get you a price."
       }]);
     }
   }, []);
@@ -69,7 +69,7 @@ export default function ChatWidget({ onClose }) {
     localStorage.removeItem('sky-chat-history');
     setMessages([{
       role: 'assistant',
-      content: "Hi! I'm Sky, the Face Painting California assistant! 🎨\nI'm here to help make your event extra special.\nWhat are we celebrating? I'd love to put together the perfect quote for you! 🎉"
+      content: "Hey! I'm Sky with Face Painting California 🎨\nWhat are you celebrating? Tell me a bit about it and I'll get you a price."
     }]);
   };
 
