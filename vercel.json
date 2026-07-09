@@ -6,6 +6,15 @@
   "functions": {
     "api/chat.js": {
       "maxDuration": 60
+    },
+    "api/sync.js": {
+      "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/sync",
+      "schedule": "0 * * * *"
+    }
+  ]
 }

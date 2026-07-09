@@ -45,6 +45,98 @@ export async function checkAvailability({ date }) {
   };
 }
 
+// Format an ISO datetime (or all-day date) into Pacific-time YYYY-MM-DD.
+function toPacificDate(iso) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(iso));
+}
+
+// Format an ISO datetime into Pacific-time HH:MM (24h). Empty for all-day.
+function toPacificTime(dateTime) {
+  if (!dateTime) return '';
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Los_Angeles',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(dateTime));
+}
+
+// Pulls a "Label: value" line out of the event description Sky writes.
+function descField(description, label) {
+  const m = (description || '').match(new RegExp(`^${label}:\\s*(.*)$`, 'mi'));
+  return m ? m[1].trim() : '';
+}
+
+/**
+ * Turns a Calendar event into a normalized booking object, or null if the
+ * event isn't a face painting booking. Recognizes Sky-created events by the
+ * "Face Painting - Name (Type)" summary or the "Booked via Sky" footer.
+ */
+function parseEventToBooking(e) {
+  const summary = e.summary || '';
+  const description = e.description || '';
+  const isBooking =
+    /face painting/i.test(summary) || /booked via sky/i.test(description);
+  if (!isBooking) return null;
+
+  const start = e.start?.dateTime || e.start?.date;
+  const end = e.end?.dateTime || e.end?.date;
+  if (!start) return null;
+
+  const isPending = /^\[pending\]/i.test(summary) || e.colorId === '6';
+  const summaryMatch = summary.match(/face painting - (.+?)\s*\((.+?)\)/i);
+  const startTime = toPacificTime(e.start?.dateTime);
+  const endTime = toPacificTime(e.end?.dateTime);
+
+  return {
+    eventId: e.id,
+    status: isPending ? 'PENDING' : 'CONFIRMED',
+    date: toPacificDate(start),
+    time: startTime && endTime ? `${startTime} - ${endTime}` : startTime,
+    client: descField(description, 'Client') || summaryMatch?.[1] || '',
+    phone: descField(description, 'Phone'),
+    email: descField(description, 'Email'),
+    eventType: descField(description, 'Event Type') || summaryMatch?.[2] || '',
+    guests: descField(description, 'Guests'),
+    location: descField(description, 'Location') || e.location || '',
+    quote: descField(description, 'Quote'),
+    notes: descField(description, 'Notes'),
+  };
+}
+
+/**
+ * Lists all face painting bookings on the calendar from 30 days ago through
+ * 12 months out, as normalized booking objects. Used by the sheet sync so the
+ * tracker mirrors whatever currently exists on the calendar.
+ */
+export async function listCalendarBookings() {
+  const auth = getAuthClient();
+  const calendarId = process.env.GOOGLE_CALENDAR_ID;
+  const calendar = google.calendar({ version: 'v3', auth });
+
+  const now = Date.now();
+  const timeMin = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const timeMax = new Date(now + 365 * 24 * 60 * 60 * 1000).toISOString();
+
+  const result = await calendar.events.list({
+    calendarId,
+    timeMin,
+    timeMax,
+    singleEvents: true,
+    orderBy: 'startTime',
+    maxResults: 2500,
+  });
+
+  return (result.data.items || [])
+    .map(parseEventToBooking)
+    .filter(Boolean);
+}
+
 /**
  * Creates a Google Calendar event for a face painting booking.
  * If pending=true, creates a [PENDING] event with orange color and no invite.

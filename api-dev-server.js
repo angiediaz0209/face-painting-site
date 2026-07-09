@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import handler from './api/chat.js';
+import syncHandler from './api/sync.js';
 
 // Load .env.local into process.env
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -58,6 +59,11 @@ const server = http.createServer((req, res) => {
       addHelpers(res);
       handler(req, res);
     });
+  } else if (req.url === '/api/sync') {
+    // Manual sync trigger for local testing (GET or POST).
+    req.headers = req.headers || {};
+    addHelpers(res);
+    syncHandler(req, res);
   } else {
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Not found' }));

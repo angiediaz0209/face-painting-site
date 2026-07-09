@@ -96,6 +96,39 @@ const BOOKING_TOOL = {
 
 const TOOLS = [AVAILABILITY_TOOL, BOOKING_TOOL];
 
+// ── Abuse protection ────────────────────────────────────────────────────────
+// /api/chat is public and costs money per message (and can create real
+// bookings), so we throttle it. This limiter is in-memory per warm serverless
+// instance — not distributed — so it won't stop a large botnet, but it does
+// throttle a single source hammering the endpoint. For stronger guarantees,
+// back it with Vercel KV / Upstash Redis later.
+const MAX_MESSAGE_LENGTH = 2000; // cap a single message
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const RATE_LIMIT_MAX = 15; // messages per IP per window
+const rateBuckets = new Map(); // ip -> timestamp[]
+
+function getClientIp(req) {
+  const xff = req.headers["x-forwarded-for"];
+  if (xff) return xff.split(",")[0].trim();
+  return req.socket?.remoteAddress || "unknown";
+}
+
+function isRateLimited(ip) {
+  const now = Date.now();
+  const recent = (rateBuckets.get(ip) || []).filter(
+    (t) => now - t < RATE_LIMIT_WINDOW_MS
+  );
+  recent.push(now);
+  rateBuckets.set(ip, recent);
+  // Opportunistic cleanup so the map can't grow unbounded.
+  if (rateBuckets.size > 5000) {
+    for (const [k, v] of rateBuckets) {
+      if (v.every((t) => now - t > RATE_LIMIT_WINDOW_MS)) rateBuckets.delete(k);
+    }
+  }
+  return recent.length > RATE_LIMIT_MAX;
+}
+
 async function handleToolUse(toolUse) {
   if (toolUse.name === "check_availability") {
     try {
@@ -107,14 +140,19 @@ async function handleToolUse(toolUse) {
       };
     } catch (error) {
       console.error("Availability check error:", error);
+      // Fail SAFE: if we can't verify the calendar, do NOT assume the date is
+      // free (that risks double-booking over a real event). Tell Sky to treat
+      // it as unverified and create a PENDING booking for the team to confirm.
       return {
         type: "tool_result",
         tool_use_id: toolUse.id,
         content: JSON.stringify({
-          available: true,
+          available: false,
+          unverified: true,
           date: toolUse.input.date,
           existingEvents: [],
-          error: "Could not check availability, proceed with booking.",
+          error:
+            "Availability could not be verified. Create the booking as PENDING (pending=true) for team review — do NOT send a confirmed calendar invite.",
         }),
       };
     }
@@ -173,10 +211,32 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { message, conversationHistory = [] } = req.body;
+    const { message, conversationHistory = [], website } = req.body;
 
-    if (!message) {
+    // Honeypot: real users never fill this hidden field; naive bots do.
+    if (website) {
+      return res.status(200).json({
+        response:
+          "Thanks for reaching out! Text us at 415-991-9374 and we'll help you out. 🎨",
+      });
+    }
+
+    if (!message || typeof message !== "string") {
       return res.status(400).json({ error: "Message is required" });
+    }
+
+    if (message.length > MAX_MESSAGE_LENGTH) {
+      return res.status(200).json({
+        response:
+          "That message is a bit long for me to read! Could you shorten it, or text us at 415-991-9374? 🎨",
+      });
+    }
+
+    if (isRateLimited(getClientIp(req))) {
+      return res.status(429).json({
+        response:
+          "You're sending messages a little fast! Give me a moment, or text us at 415-991-9374. 🎨",
+      });
     }
 
     const client = new Anthropic();
@@ -186,7 +246,7 @@ export default async function handler(req, res) {
       ...recentHistory
         .map((msg) => ({
           role: msg.role || (msg.type === "user" ? "user" : "assistant"),
-          content: msg.content || msg.text || "",
+          content: (msg.content || msg.text || "").slice(0, MAX_MESSAGE_LENGTH),
         }))
         .filter((msg) => msg.content),
       { role: "user", content: message },
@@ -198,8 +258,12 @@ export default async function handler(req, res) {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           return await client.messages.create({
-            model: "claude-sonnet-4-20250514",
+            model: "claude-sonnet-5",
             max_tokens: 1024,
+            // Keep replies fast and within the 1024-token budget: on Sonnet 5
+            // adaptive thinking is on by default, which would add latency and
+            // could truncate a reply. Sky doesn't need it for this chat flow.
+            thinking: { type: "disabled" },
             system: getSkySystemPrompt(),
             tools: TOOLS,
             messages: msgs,

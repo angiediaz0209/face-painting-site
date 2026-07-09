@@ -39,7 +39,8 @@ export default function ChatWidget({ onClose }) {
       const res = await fetch(`${API_URL}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMessage, conversationHistory: updatedMessages }),
+        // `website` is a honeypot: always empty for real users. See api/chat.js.
+        body: JSON.stringify({ message: userMessage, conversationHistory: updatedMessages, website: '' }),
       });
       const data = await res.json();
       setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
