@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import handler from './api/chat.js';
 import syncHandler from './api/sync.js';
 import confirmHandler from './api/confirm.js';
+import declineHandler from './api/decline.js';
 
 // Load .env.local into process.env
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -68,6 +69,9 @@ const server = http.createServer((req, res) => {
   } else if (req.url.startsWith('/api/confirm')) {
     // One-click approve link (GET with query params).
     confirmHandler(req, res);
+  } else if (req.url.startsWith('/api/decline')) {
+    // One-click decline link (GET with query params).
+    declineHandler(req, res);
   } else {
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Not found' }));

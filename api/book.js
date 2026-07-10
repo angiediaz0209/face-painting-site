@@ -186,6 +186,28 @@ export async function confirmBooking(eventId) {
 }
 
 /**
+ * Declines a pending booking: deletes the calendar event. No invite was ever
+ * sent for a pending booking, so no cancellation notice goes out. Used by the
+ * one-click Decline link in the team notification email.
+ */
+export async function declineBooking(eventId) {
+  const auth = getAuthClient();
+  const calendarId = process.env.GOOGLE_CALENDAR_ID;
+  const calendar = google.calendar({ version: 'v3', auth });
+
+  let clientName = '';
+  try {
+    const { data: event } = await calendar.events.get({ calendarId, eventId });
+    clientName = descField(event.description, 'Client');
+  } catch {
+    // event may already be gone; deleting below is a no-op / 404
+  }
+
+  await calendar.events.delete({ calendarId, eventId, sendUpdates: 'none' });
+  return { eventId, clientName };
+}
+
+/**
  * Creates a Google Calendar event for a face painting booking.
  * If pending=true, creates a [PENDING] event with orange color and no invite.
  */

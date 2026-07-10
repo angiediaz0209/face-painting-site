@@ -30,6 +30,12 @@ function approveUrl(eventId) {
   )}&token=${approveToken(eventId)}`;
 }
 
+function declineUrl(eventId) {
+  return `${BASE_URL}/api/decline?eventId=${encodeURIComponent(
+    eventId
+  )}&token=${approveToken(eventId)}`;
+}
+
 function esc(s) {
   return String(s ?? "").replace(/[&<>"]/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])
@@ -84,12 +90,18 @@ export async function sendBookingNotification(bookingInput, bookingResult) {
   const approveBlock = isPending
     ? `<div style="margin:20px 0;">
          <a href="${approveUrl(bookingResult.eventId)}"
-            style="display:inline-block;background:#16a34a;color:#fff;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:16px;">
+            style="display:inline-block;background:#16a34a;color:#fff;padding:14px 24px;border-radius:10px;text-decoration:none;font-weight:700;font-size:16px;">
            Approve &amp; send invite
          </a>
-         <p style="color:#666;font-size:13px;margin-top:8px;">
-           Confirms the booking, turns the calendar event green, and emails
+         <a href="${declineUrl(bookingResult.eventId)}"
+            style="display:inline-block;background:#f3f4f6;color:#b91c1c;padding:14px 24px;border-radius:10px;text-decoration:none;font-weight:700;font-size:16px;margin-left:10px;border:1px solid #e5e7eb;">
+           Decline
+         </a>
+         <p style="color:#666;font-size:13px;margin-top:10px;">
+           <b>Approve</b> confirms the booking, turns the event green, and emails
            ${esc(bookingInput.clientEmail)} their invite.
+           <b>Decline</b> removes the pending booking from your calendar (no
+           message is sent to the client).
          </p>
        </div>`
     : "";
