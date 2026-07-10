@@ -4,19 +4,19 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Sky's instructions contain private pricing/business rules and are kept OUT of
-// the git repo. In production they are supplied via the SKY_INSTRUCTIONS env var
-// (set in the Vercel dashboard); for local development they fall back to the
-// gitignored SKY_INSTRUCTIONS.md file.
+// Sky's instructions live in SKY_INSTRUCTIONS.md, committed to the PRIVATE repo
+// so they deploy with the code and can be updated with a normal git push. The
+// file is the source of truth. The SKY_INSTRUCTIONS env var is only a fallback
+// if the file is ever unavailable (and is otherwise ignored).
 function loadSkyInstructions() {
-  if (process.env.SKY_INSTRUCTIONS && process.env.SKY_INSTRUCTIONS.trim()) {
-    return process.env.SKY_INSTRUCTIONS;
-  }
   try {
     return fs.readFileSync(path.join(__dirname, '..', 'SKY_INSTRUCTIONS.md'), 'utf-8');
   } catch {
+    if (process.env.SKY_INSTRUCTIONS && process.env.SKY_INSTRUCTIONS.trim()) {
+      return process.env.SKY_INSTRUCTIONS;
+    }
     throw new Error(
-      'Sky instructions missing: set the SKY_INSTRUCTIONS environment variable (production) or add SKY_INSTRUCTIONS.md locally (development).'
+      'Sky instructions missing: SKY_INSTRUCTIONS.md not found and SKY_INSTRUCTIONS env var not set.'
     );
   }
 }
