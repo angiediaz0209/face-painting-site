@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { declineBooking } from "./book.js";
 import { setBookingStatus } from "./sheets.js";
+import { sendEmail, clientDeclineHtml } from "./email.js";
 
 // Must match the scheme in api/notify.js so the emailed link verifies.
 const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
@@ -45,10 +46,23 @@ export default async function handler(req, res) {
 
   try {
     const result = await declineBooking(eventId);
-    // Await so it finishes before the function is frozen after the response.
-    await setBookingStatus(eventId, "CANCELLED").catch((e) =>
-      console.error("Sheet status update failed:", e)
-    );
+
+    // Await both side effects so they finish before the function is frozen.
+    await Promise.allSettled([
+      setBookingStatus(eventId, "CANCELLED").catch((e) =>
+        console.error("Sheet status update failed:", e)
+      ),
+      result.clientEmail
+        ? sendEmail({
+            to: result.clientEmail,
+            subject: "About your Face Painting California booking request",
+            html: clientDeclineHtml({
+              client: result.clientName,
+              date: result.date,
+            }),
+          }).catch((e) => console.error("Client decline email failed:", e))
+        : Promise.resolve(),
+    ]);
 
     const who = result.clientName ? ` for ${result.clientName}` : "";
     return send(

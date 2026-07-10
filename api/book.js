@@ -149,6 +149,7 @@ export async function confirmBooking(eventId) {
 
   const { data: event } = await calendar.events.get({ calendarId, eventId });
 
+  const parsed = parseEventToBooking(event) || {};
   const clientEmail = descField(event.description, 'Email');
   const clientName = descField(event.description, 'Client');
 
@@ -169,11 +170,13 @@ export async function confirmBooking(eventId) {
     patch.attendees = [{ email: clientEmail, displayName: clientName || undefined }];
   }
 
+  // Keep the client as a guest for calendar visibility, but do NOT send the
+  // native Google invite — the client gets a branded confirmation email instead.
   const { data: updated } = await calendar.events.patch({
     calendarId,
     eventId,
     resource: patch,
-    sendUpdates: clientEmail ? 'all' : 'none',
+    sendUpdates: 'none',
   });
 
   return {
@@ -182,6 +185,13 @@ export async function confirmBooking(eventId) {
     clientName,
     summary,
     start: updated.start?.dateTime || updated.start?.date || '',
+    // full booking fields for the client confirmation email
+    date: parsed.date || '',
+    time: parsed.time || '',
+    location: parsed.location || '',
+    quote: parsed.quote || '',
+    eventType: parsed.eventType || '',
+    guests: parsed.guests || '',
   };
 }
 
@@ -196,15 +206,20 @@ export async function declineBooking(eventId) {
   const calendar = google.calendar({ version: 'v3', auth });
 
   let clientName = '';
+  let clientEmail = '';
+  let date = '';
   try {
     const { data: event } = await calendar.events.get({ calendarId, eventId });
-    clientName = descField(event.description, 'Client');
+    const parsed = parseEventToBooking(event) || {};
+    clientName = parsed.client || descField(event.description, 'Client');
+    clientEmail = parsed.email || descField(event.description, 'Email');
+    date = parsed.date || '';
   } catch {
     // event may already be gone; deleting below is a no-op / 404
   }
 
   await calendar.events.delete({ calendarId, eventId, sendUpdates: 'none' });
-  return { eventId, clientName };
+  return { eventId, clientName, clientEmail, date };
 }
 
 /**

@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { confirmBooking } from "./book.js";
 import { setBookingStatus } from "./sheets.js";
+import { sendEmail, clientConfirmationHtml } from "./email.js";
 
 // Must match the scheme in api/notify.js so the emailed link verifies.
 const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
@@ -46,14 +47,30 @@ export default async function handler(req, res) {
 
   try {
     const result = await confirmBooking(eventId);
-    // Await so it completes before the function is frozen after the response.
-    await setBookingStatus(eventId, "CONFIRMED").catch((e) =>
-      console.error("Sheet status update failed:", e)
-    );
+
+    // Await both side effects so they finish before the function is frozen.
+    await Promise.allSettled([
+      setBookingStatus(eventId, "CONFIRMED").catch((e) =>
+        console.error("Sheet status update failed:", e)
+      ),
+      result.clientEmail
+        ? sendEmail({
+            to: result.clientEmail,
+            subject: "You're all booked with Face Painting California! 🎨",
+            html: clientConfirmationHtml({
+              client: result.clientName,
+              date: result.date,
+              time: result.time,
+              location: result.location,
+              quote: result.quote,
+            }),
+          }).catch((e) => console.error("Client confirmation email failed:", e))
+        : Promise.resolve(),
+    ]);
 
     const invite = result.clientEmail
-      ? `<p>A calendar invite was sent to <b>${result.clientEmail}</b>.</p>`
-      : `<p>No client email was on file, so no invite was sent.</p>`;
+      ? `<p>A confirmation email was sent to <b>${result.clientEmail}</b>.</p>`
+      : `<p>No client email was on file, so no confirmation was sent.</p>`;
 
     return send(
       200,
