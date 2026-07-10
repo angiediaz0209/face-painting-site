@@ -24,7 +24,7 @@ const AVAILABILITY_TOOL = {
 const BOOKING_TOOL = {
   name: "create_booking",
   description:
-    "Creates a face painting booking on Google Calendar. If the date is available, creates a confirmed booking and sends the client a calendar invitation. If the date has a conflict (busy), set pending=true to create a [PENDING] booking without sending the client an invite — the team will confirm manually.",
+    "Creates a face painting booking on Google Calendar. EVERY booking is created as PENDING for the team to review and approve. It is saved without sending the client an invite; the team approves it later (which sends the invite). Only call this after the client has confirmed the summary of their booking.",
   input_schema: {
     type: "object",
     properties: {
@@ -77,7 +77,7 @@ const BOOKING_TOOL = {
       pending: {
         type: "boolean",
         description:
-          "Set to true when the date has a conflict and you need to create a pending booking for team review. When false or omitted, creates a confirmed booking with calendar invite.",
+          "Always true. Every booking is created pending team approval (this is enforced server-side regardless of the value sent).",
       },
     },
     required: [
@@ -206,16 +206,20 @@ async function handleToolUse(toolUse) {
 
   if (toolUse.name === "create_booking") {
     try {
-      const bookingResult = await createBooking(toolUse.input);
+      // Every booking must be team-approved before it is confirmed, so force
+      // pending here regardless of what the model passed. This guarantees no
+      // booking auto-confirms or sends the client an invite without approval.
+      const bookingInput = { ...toolUse.input, pending: true };
+      const bookingResult = await createBooking(bookingInput);
       const isPending = bookingResult.pending;
 
       // Send email notification to admin (non-blocking)
-      sendBookingNotification(toolUse.input, bookingResult).catch((err) =>
+      sendBookingNotification(bookingInput, bookingResult).catch((err) =>
         console.error("Notification error:", err)
       );
 
       // Add booking to Google Sheet (non-blocking)
-      addBookingToSheet(toolUse.input, bookingResult).catch((err) =>
+      addBookingToSheet(bookingInput, bookingResult).catch((err) =>
         console.error("Sheet error:", err)
       );
 
@@ -226,8 +230,8 @@ async function handleToolUse(toolUse) {
           success: true,
           pending: isPending,
           message: isPending
-            ? `Pending booking created for ${bookingResult.summary}, Date: ${bookingResult.start}. The team will review and confirm with the client by text at ${toolUse.input.clientPhone}.`
-            : `Booking confirmed! Event: ${bookingResult.summary}, Date: ${bookingResult.start}. Calendar invite sent to ${toolUse.input.clientEmail}.`,
+            ? `Pending booking created for ${bookingResult.summary}, Date: ${bookingResult.start}. The team will review and confirm with the client by text at ${bookingInput.clientPhone}.`
+            : `Booking confirmed! Event: ${bookingResult.summary}, Date: ${bookingResult.start}. Calendar invite sent to ${bookingInput.clientEmail}.`,
         }),
       };
     } catch (error) {
