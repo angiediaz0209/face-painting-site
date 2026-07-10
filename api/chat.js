@@ -3,6 +3,7 @@ import getSkySystemPrompt from "./sky-system-prompt.js";
 import { createBooking, checkAvailability } from "./book.js";
 import { sendBookingNotification } from "./notify.js";
 import { addBookingToSheet } from "./sheets.js";
+import { computeQuote } from "./pricing.js";
 
 const AVAILABILITY_TOOL = {
   name: "check_availability",
@@ -94,7 +95,34 @@ const BOOKING_TOOL = {
   },
 };
 
-const TOOLS = [AVAILABILITY_TOOL, BOOKING_TOOL];
+const QUOTE_TOOL = {
+  name: "calculate_quote",
+  description:
+    "Calculates the exact price for a booking. ALWAYS call this before telling a client any total, instead of doing the math yourself. It returns the hours price, travel fee, second artist fee, and grand total. If the city is outside the service area it returns inServiceArea=false, so you can decline politely.",
+  input_schema: {
+    type: "object",
+    properties: {
+      city: {
+        type: "string",
+        description:
+          "The event city (e.g. San Rafael, Novato, San Francisco, Santa Rosa).",
+      },
+      hours: {
+        type: "number",
+        description:
+          "Total painting hours. 1 is $150, 2 is $300, and each hour beyond 2 adds $100. Default to 2 for most events.",
+      },
+      secondArtist: {
+        type: "boolean",
+        description:
+          "True if a second artist is included (+$200). Recommend for groups of about 23 or more.",
+      },
+    },
+    required: ["city", "hours"],
+  },
+};
+
+const TOOLS = [QUOTE_TOOL, AVAILABILITY_TOOL, BOOKING_TOOL];
 
 // ── Abuse protection ────────────────────────────────────────────────────────
 // /api/chat is public and costs money per message (and can create real
@@ -130,6 +158,24 @@ function isRateLimited(ip) {
 }
 
 async function handleToolUse(toolUse) {
+  if (toolUse.name === "calculate_quote") {
+    try {
+      const result = computeQuote(toolUse.input);
+      return {
+        type: "tool_result",
+        tool_use_id: toolUse.id,
+        content: JSON.stringify(result),
+      };
+    } catch (error) {
+      console.error("Quote calc error:", error);
+      return {
+        type: "tool_result",
+        tool_use_id: toolUse.id,
+        content: JSON.stringify({ error: "Could not calculate the quote." }),
+      };
+    }
+  }
+
   if (toolUse.name === "check_availability") {
     try {
       const result = await checkAvailability(toolUse.input);
@@ -282,9 +328,9 @@ export default async function handler(req, res) {
     // Loop to handle multiple tool calls (check availability → then book)
     let response = await callClaude(messages);
 
-    // Handle up to 3 rounds of tool use (availability check + booking + confirmation)
+    // Handle up to 4 rounds of tool use (quote + availability check + booking + confirmation)
     let rounds = 0;
-    while (response.stop_reason === "tool_use" && rounds < 3) {
+    while (response.stop_reason === "tool_use" && rounds < 4) {
       rounds++;
       const toolUse = response.content.find(
         (block) => block.type === "tool_use"
