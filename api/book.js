@@ -75,13 +75,13 @@ function descField(description, label) {
 /**
  * Turns a Calendar event into a normalized booking object, or null if the
  * event isn't a face painting booking. Recognizes Sky-created events by the
- * "Face Painting - Name (Type)" summary or the "Booked via Sky" footer.
+ * "Face Painting - Name (Type)" summary or the "Booked by Sky" footer.
  */
 function parseEventToBooking(e) {
   const summary = e.summary || '';
   const description = e.description || '';
   const isBooking =
-    /face painting/i.test(summary) || /booked via sky/i.test(description);
+    /face painting/i.test(summary) || /booked by sky/i.test(description);
   if (!isBooking) return null;
 
   const start = e.start?.dateTime || e.start?.date;
@@ -231,7 +231,7 @@ export async function createBooking(bookingData) {
       `Quote: ${quote}`,
       notes ? `Notes: ${notes}` : '',
       '',
-      'Booked via Sky AI',
+      "Booked by Sky, Face Painting California's assistant",
     ]
       .filter(Boolean)
       .join('\n'),
