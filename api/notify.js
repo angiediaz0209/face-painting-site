@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import crypto from "crypto";
 
 function getAuthClient() {
   const oauth2Client = new google.auth.OAuth2(
@@ -11,9 +12,38 @@ function getAuthClient() {
   return oauth2Client;
 }
 
+// Same secret + token scheme as api/confirm.js so the approve link verifies.
+const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
+const BASE_URL = process.env.APP_BASE_URL || "https://face-painting-site.vercel.app";
+
+export function approveToken(eventId) {
+  return crypto
+    .createHmac("sha256", CONFIRM_SECRET)
+    .update(eventId)
+    .digest("hex")
+    .slice(0, 32);
+}
+
+function approveUrl(eventId) {
+  return `${BASE_URL}/api/confirm?eventId=${encodeURIComponent(
+    eventId
+  )}&token=${approveToken(eventId)}`;
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])
+  );
+}
+
+// RFC 2047 encoded-word so emoji/unicode in the Subject render correctly.
+function encodeSubject(subject) {
+  return `=?UTF-8?B?${Buffer.from(subject, "utf-8").toString("base64")}?=`;
+}
+
 /**
- * Sends an email notification to the admin when Sky creates a booking.
- * Uses Gmail API with the same Google OAuth credentials as Calendar.
+ * Emails the team when Sky creates a booking. For pending bookings the email
+ * includes a one-click "Approve & send invite" button (see api/confirm.js).
  */
 export async function sendBookingNotification(bookingInput, bookingResult) {
   const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL;
@@ -27,46 +57,65 @@ export async function sendBookingNotification(bookingInput, bookingResult) {
 
   const isPending = bookingResult.pending;
   const status = isPending ? "PENDING - Needs Confirmation" : "CONFIRMED";
-  const statusEmoji = isPending ? "\u26a0\ufe0f" : "\u2705";
+  const statusEmoji = isPending ? "⚠️" : "✅";
+  const subject = `${statusEmoji} New booking: ${bookingInput.clientName}, ${bookingInput.date} (${status})`;
 
-  const subject = `${statusEmoji} New Booking: ${bookingInput.clientName} - ${bookingInput.date} (${status})`;
-
-  const body = [
-    `${statusEmoji} ${status} BOOKING`,
-    `${"=".repeat(40)}`,
-    ``,
-    `Client: ${bookingInput.clientName}`,
-    `Email: ${bookingInput.clientEmail}`,
-    `Phone: ${bookingInput.clientPhone}`,
-    ``,
-    `Event Type: ${bookingInput.eventType}`,
-    `Guests: ${bookingInput.guestCount}`,
-    `Date: ${bookingInput.date}`,
-    `Time: ${bookingInput.startTime} - ${bookingInput.endTime}`,
-    `Location: ${bookingInput.location}`,
-    `Quote: ${bookingInput.quote}`,
-    bookingInput.notes ? `Notes: ${bookingInput.notes}` : "",
-    ``,
-    `${"=".repeat(40)}`,
-    isPending
-      ? `ACTION NEEDED: Check artist availability and text client at ${bookingInput.clientPhone} to confirm.`
-      : `Calendar invite has been sent to ${bookingInput.clientEmail}.`,
-    ``,
-    `Calendar link: ${bookingResult.htmlLink}`,
-    ``,
-    `-- Sky, your Face Painting California assistant`,
+  const rows = [
+    ["Client", bookingInput.clientName],
+    ["Email", bookingInput.clientEmail],
+    ["Phone", bookingInput.clientPhone],
+    ["Event", bookingInput.eventType],
+    ["Guests", bookingInput.guestCount],
+    ["Date", bookingInput.date],
+    ["Time", `${bookingInput.startTime} - ${bookingInput.endTime}`],
+    ["Location", bookingInput.location],
+    ["Quote", bookingInput.quote],
+    ["Notes", bookingInput.notes || ""],
   ]
-    .filter(Boolean)
-    .join("\n");
+    .filter(([, v]) => v)
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:4px 12px 4px 0;color:#666;">${k}</td><td style="padding:4px 0;font-weight:600;">${esc(
+          v
+        )}</td></tr>`
+    )
+    .join("");
 
-  // Build RFC 2822 email with Sky as sender name
+  const approveBlock = isPending
+    ? `<div style="margin:20px 0;">
+         <a href="${approveUrl(bookingResult.eventId)}"
+            style="display:inline-block;background:#16a34a;color:#fff;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:16px;">
+           Approve &amp; send invite
+         </a>
+         <p style="color:#666;font-size:13px;margin-top:8px;">
+           Confirms the booking, turns the calendar event green, and emails
+           ${esc(bookingInput.clientEmail)} their invite.
+         </p>
+       </div>`
+    : "";
+
+  const calendarLink = bookingResult.htmlLink
+    ? `<p style="margin-top:16px;"><a href="${bookingResult.htmlLink}">Open in Google Calendar</a></p>`
+    : "";
+
+  const html = `<!doctype html><html><body style="margin:0;background:#faf7f5;">
+    <div style="font-family:system-ui,-apple-system,sans-serif;max-width:540px;margin:0 auto;padding:24px;color:#1a1a1a;">
+      <h2 style="margin:0 0 4px;">${statusEmoji} ${status}</h2>
+      <table style="border-collapse:collapse;font-size:15px;margin-top:12px;">${rows}</table>
+      ${approveBlock}
+      ${calendarLink}
+      <p style="color:#999;font-size:12px;margin-top:24px;">Sky, your Face Painting California assistant</p>
+    </div>
+  </body></html>`;
+
   const emailLines = [
     `From: "Sky - Face Painting CA" <${adminEmail}>`,
     `To: ${adminEmail}`,
-    `Subject: ${subject}`,
-    `Content-Type: text/plain; charset=utf-8`,
+    `Subject: ${encodeSubject(subject)}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: text/html; charset=utf-8`,
     ``,
-    body,
+    html,
   ];
   const rawEmail = emailLines.join("\r\n");
   const encodedEmail = Buffer.from(rawEmail)
@@ -77,9 +126,7 @@ export async function sendBookingNotification(bookingInput, bookingResult) {
 
   await gmail.users.messages.send({
     userId: "me",
-    requestBody: {
-      raw: encodedEmail,
-    },
+    requestBody: { raw: encodedEmail },
   });
 
   console.log(`Booking notification sent to ${adminEmail}`);

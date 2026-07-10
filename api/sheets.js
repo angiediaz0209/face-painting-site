@@ -183,6 +183,33 @@ export async function syncBookingsToSheet(bookings, { markCancellations = false 
 }
 
 /**
+ * Sets the Status cell for a single booking (found by Event ID). Used by the
+ * one-click approve flow to flip a row to CONFIRMED right away.
+ */
+export async function setBookingStatus(eventId, status) {
+  const client = getSheetsClient();
+  if (!client) return;
+  const { sheets, sheetId } = client;
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: RANGE,
+  });
+  const rows = res.data.values || [];
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][COL.EVENT_ID] === eventId) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: sheetId,
+        range: `Sheet1!A${i + 1}`,
+        valueInputOption: "RAW",
+        requestBody: { values: [[status]] },
+      });
+      return;
+    }
+  }
+}
+
+/**
  * Adds (or updates) a single booking right after Sky creates it.
  * Never cancels other rows.
  */

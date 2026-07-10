@@ -138,6 +138,54 @@ export async function listCalendarBookings() {
 }
 
 /**
+ * Confirms a previously-pending booking: strips the [PENDING] marker, turns the
+ * event green, adds the client as an attendee, and sends them the invite. Used
+ * by the one-click approve link in the team notification email.
+ */
+export async function confirmBooking(eventId) {
+  const auth = getAuthClient();
+  const calendarId = process.env.GOOGLE_CALENDAR_ID;
+  const calendar = google.calendar({ version: 'v3', auth });
+
+  const { data: event } = await calendar.events.get({ calendarId, eventId });
+
+  const clientEmail = descField(event.description, 'Email');
+  const clientName = descField(event.description, 'Client');
+
+  const summary = (event.summary || '').replace(/^\[pending\]\s*/i, '').trim();
+  const description = (event.description || '')
+    .split('\n')
+    .filter((line) => !/^⚠️/.test(line.trim()))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  const patch = {
+    summary,
+    description,
+    colorId: '10', // green = confirmed
+  };
+  if (clientEmail) {
+    patch.attendees = [{ email: clientEmail, displayName: clientName || undefined }];
+  }
+
+  const { data: updated } = await calendar.events.patch({
+    calendarId,
+    eventId,
+    resource: patch,
+    sendUpdates: clientEmail ? 'all' : 'none',
+  });
+
+  return {
+    eventId,
+    clientEmail,
+    clientName,
+    summary,
+    start: updated.start?.dateTime || updated.start?.date || '',
+  };
+}
+
+/**
  * Creates a Google Calendar event for a face painting booking.
  * If pending=true, creates a [PENDING] event with orange color and no invite.
  */

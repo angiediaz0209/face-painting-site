@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import handler from './api/chat.js';
 import syncHandler from './api/sync.js';
+import confirmHandler from './api/confirm.js';
 
 // Load .env.local into process.env
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -64,6 +65,9 @@ const server = http.createServer((req, res) => {
     req.headers = req.headers || {};
     addHelpers(res);
     syncHandler(req, res);
+  } else if (req.url.startsWith('/api/confirm')) {
+    // One-click approve link (GET with query params).
+    confirmHandler(req, res);
   } else {
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Not found' }));
