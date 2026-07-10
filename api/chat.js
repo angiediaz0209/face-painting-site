@@ -213,15 +213,18 @@ async function handleToolUse(toolUse) {
       const bookingResult = await createBooking(bookingInput);
       const isPending = bookingResult.pending;
 
-      // Send email notification to admin (non-blocking)
-      sendBookingNotification(bookingInput, bookingResult).catch((err) =>
-        console.error("Notification error:", err)
-      );
-
-      // Add booking to Google Sheet (non-blocking)
-      addBookingToSheet(bookingInput, bookingResult).catch((err) =>
-        console.error("Sheet error:", err)
-      );
+      // Await both side effects so they finish before this serverless function
+      // is frozen after the response. (Fire-and-forget gets cut off mid-write,
+      // which is why sheet rows were going missing.) Failures are logged but
+      // don't block the booking.
+      await Promise.allSettled([
+        sendBookingNotification(bookingInput, bookingResult).catch((err) =>
+          console.error("Notification error:", err)
+        ),
+        addBookingToSheet(bookingInput, bookingResult).catch((err) =>
+          console.error("Sheet error:", err)
+        ),
+      ]);
 
       return {
         type: "tool_result",

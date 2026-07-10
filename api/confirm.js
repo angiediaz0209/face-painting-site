@@ -46,7 +46,8 @@ export default async function handler(req, res) {
 
   try {
     const result = await confirmBooking(eventId);
-    setBookingStatus(eventId, "CONFIRMED").catch((e) =>
+    // Await so it completes before the function is frozen after the response.
+    await setBookingStatus(eventId, "CONFIRMED").catch((e) =>
       console.error("Sheet status update failed:", e)
     );
 
