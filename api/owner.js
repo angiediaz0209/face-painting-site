@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { listCalendarBookings, createOwnerBooking, updateBooking } from "./_lib/book.js";
 import { syncBookingsToSheet } from "./_lib/sheets.js";
-import { fmtDate, fmtTimeRange } from "./_lib/email.js";
+import { fmtTimeRange } from "./_lib/email.js";
 
 const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
 const OWNER_PASSWORD = process.env.OWNER_DASHBOARD_PASSWORD || "";
@@ -59,100 +59,108 @@ async function readBody(req) {
 }
 
 // ── Rendering ────────────────────────────────────────────────────────────────
+const SERIF = "Georgia,'Iowan Old Style','Times New Roman',serif";
 const STYLE = `
-  :root{color-scheme:light dark}
+  :root{color-scheme:light}
   *{box-sizing:border-box}
-  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:#faf6ef;color:#2d3540}
-  .wrap{max-width:1120px;margin:0 auto;padding:20px 16px 60px}
-  .grid{display:grid;grid-template-columns:1fr;gap:22px}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:#e9e2d4;color:#2b2a28;-webkit-font-smoothing:antialiased}
+  a{color:inherit}
+
+  /* App shell */
+  .app{max-width:660px;margin:0 auto;padding:14px 12px 48px}
   @media(min-width:900px){
-    .grid.has-cal{grid-template-columns:minmax(0,1fr) 400px}
-    .grid.has-cal .col-cal{position:sticky;top:20px;align-self:start}
+    .app{max-width:1180px;margin:26px auto;padding:0;background:#f6f0e4;border-radius:24px;overflow:hidden;box-shadow:0 14px 46px rgba(70,45,20,.10);
+      display:grid;grid-template-columns:minmax(0,1fr) 430px;grid-template-rows:auto auto 1fr;
+      grid-template-areas:"head cal" "add cal" "list cal"}
+    .a-head{grid-area:head;padding:34px 32px 0 38px}
+    .a-add{grid-area:add;padding:18px 32px 2px 38px}
+    .a-list{grid-area:list;padding:14px 32px 42px 38px}
+    .a-cal{grid-area:cal;background:#fff;border-left:1px solid #ece2d1;padding:30px 30px 34px}
   }
-  h1{font-size:22px;margin:6px 0 2px}
-  .sub{color:#9aa1a9;font-size:14px;margin:0 0 20px}
-  .sec{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#9aa1a9;margin:26px 0 10px}
-  .card{background:#fff;border:1px solid #efe7db;border-radius:16px;padding:16px 16px 14px;margin-bottom:12px}
-  .card.req{border-color:#f0c98a;background:#fffaf1}
-  .row{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
-  .date{font-size:17px;font-weight:800}
-  .who{color:#55606b;font-size:14px;margin-top:2px}
-  .meta{color:#9aa1a9;font-size:13px;margin-top:6px;line-height:1.5}
-  .badge{font-size:11px;font-weight:800;padding:4px 10px;border-radius:20px;white-space:nowrap}
-  .b-confirmed{background:#e6f4ea;color:#1e7a3c}
-  .b-pending{background:#fdeee0;color:#b5651d}
-  .b-cancelled{background:#eee;color:#888}
-  .b-reschedule{background:#fff3d6;color:#9a6a00}
-  .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
-  a.btn,button.btn{display:inline-block;border:none;border-radius:22px;padding:10px 18px;font-size:14px;font-weight:700;text-decoration:none;cursor:pointer}
-  .btn-green{background:#4e9d63;color:#fff}
-  .btn-coral{background:#e8836b;color:#fff}
-  .btn-ghost{background:#f1f1f1;color:#b91c1c}
-  details.resched{margin-top:12px}
-  details.resched summary{font-size:14px;color:#55606b;cursor:pointer}
-  details.more{margin-top:12px;border-top:1px solid #efe7db;padding-top:10px}
-  details.more summary{font-size:13px;font-weight:700;color:#55606b;cursor:pointer;list-style:none}
-  details.more summary::-webkit-details-marker{display:none}
-  details.more summary::before{content:"\\25B8  ";color:#9aa1a9}
-  details.more[open] summary::before{content:"\\25BE  "}
-  .kv{margin-top:10px;font-size:14px;line-height:1.5}
-  .kv div{display:flex;gap:8px;padding:3px 0}
-  .kv .k{color:#9aa1a9;min-width:70px}
-  .kv .v{color:#2d3540;word-break:break-word;flex:1}
-  .kv a{color:#2f6fd6;text-decoration:none}
-  .gcal{display:inline-block;margin-top:12px;font-size:14px;font-weight:700;color:#2f6fd6;text-decoration:none}
-  .form-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
-  .form-row input{flex:1;min-width:120px;padding:10px;border:1px solid #efe7db;border-radius:10px;font-size:15px}
-  details.add,details.edit{margin-top:12px}
-  details.add>summary,details.edit>summary{display:inline-block}
-  .bform{display:flex;flex-direction:column;gap:8px;margin-top:12px}
-  .bform .bin{padding:10px;border:1px solid #efe7db;border-radius:10px;font-size:15px;width:100%}
-  .bform textarea.bin{resize:vertical;font-family:inherit}
-  .btn-neutral{background:#f1f1f1;color:#55606b}
-  .addbar{margin:2px 0 18px}
-  .calpanel{border:1px solid #efe7db;border-radius:16px;background:#fff;padding:14px}
-  .calnav{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-  .calnav .t{font-size:15px;font-weight:800;color:#2d3540}
-  .calnav a{display:inline-block;width:32px;height:32px;line-height:30px;text-align:center;border:1px solid #efe7db;border-radius:8px;color:#55606b;text-decoration:none;font-size:16px}
-  .cal-dow{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:11px;font-weight:800;color:#9aa1a9;margin-bottom:4px}
-  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
-  .cal-cell{min-height:62px;border:1px solid #f0eadf;border-radius:8px;padding:3px}
-  .cal-cell.empty{border:none;background:transparent}
-  .cal-cell.today{border-color:#e8836b;background:#fdf3ef}
-  .cal-d{font-size:11px;font-weight:700;color:#9aa1a9;margin-bottom:2px}
-  .cal-pill{display:block;border-radius:5px;padding:1px 4px;margin-bottom:2px;font-size:10px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-decoration:none}
-  .pill-green{background:#e6f4ea;color:#1e7a3c}
-  .pill-orange{background:#fdeee0;color:#b5651d}
-  .pill-yellow{background:#fff3d6;color:#9a6a00}
-  .callink{display:inline-block;margin-top:12px;font-size:13px;color:#2f6fd6;text-decoration:none}
-  .empty{color:#9aa1a9;text-align:center;padding:30px 0}
-  .login{max-width:340px;margin:80px auto;text-align:center}
-  .login input{width:100%;padding:12px;border:1px solid #efe7db;border-radius:12px;font-size:16px;margin:10px 0}
-  .login .btn-coral{width:100%}
-  .err{color:#b91c1c;font-size:14px;margin-top:8px}
-  @media (prefers-color-scheme:dark){
-    body{background:#1c2029;color:#e6e8ec}
-    .card{background:#252b36;border-color:#333b47}
-    .card.req{background:#2c2a1f;border-color:#5c4a1e}
-    .form-row input,.login input,.bform .bin{background:#1c2029;border-color:#333b47;color:#e6e8ec}
-    .btn-ghost{background:#333b47;color:#ff9b8f}
-    .btn-neutral{background:#333b47;color:#c8ccd2}
-    details.more{border-color:#333b47}
-    .kv .v{color:#e6e8ec}
-    .kv a,.gcal,.callink{color:#7fb0ff}
-    .calpanel{background:#252b36;border-color:#333b47}
-    .calnav .t{color:#e6e8ec}
-    .calnav a{border-color:#333b47;color:#c8ccd2}
-    .cal-cell{border-color:#333b47}
-    .cal-cell.today{background:#2f2622;border-color:#e8836b}
-    .pill-green{background:#1e3a28;color:#7fd39a}
-    .pill-orange{background:#3a2c1c;color:#e6a86b}
-    .pill-yellow{background:#3a341c;color:#e0c979}
-  }
+  .a-head{padding:6px 6px 0}
+  .a-add{padding:12px 6px 2px}
+  .a-cal{padding:8px 2px}
+  .a-list{padding:8px 6px 0}
+
+  h1{font-family:${SERIF};font-size:30px;font-weight:700;letter-spacing:-.4px;margin:2px 0 4px}
+  .sub{color:#a29a8b;font-size:14px;margin:0}
+  .sec{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#b0a692;margin:26px 0 12px}
+
+  /* Buttons */
+  .btn{display:inline-block;border:none;border-radius:22px;padding:9px 18px;font-size:14px;font-weight:700;text-decoration:none;cursor:pointer;font-family:inherit}
+  .btn-add{background:#b0542e;color:#fff;padding:11px 20px;border-radius:24px;font-size:15px}
+  .btn-cancel{background:#efe6d6;color:#a94e2a}
+  .btn-resched{background:#f1d8c6;color:#a94e2a}
+  .btn-confirm{background:#5f8c6b;color:#fff}
+  @media(max-width:899px){ .btn-add{display:block;width:100%;text-align:center} }
+
+  /* Cards */
+  .card{position:relative;background:#fff;border:1px solid #efe6d6;border-radius:16px;padding:20px 20px 16px;margin-bottom:14px;
+    transition:box-shadow .16s ease,border-color .16s ease}
+  .card:hover,.card.hl{border-color:#e6c4a6;box-shadow:0 8px 24px rgba(120,70,40,.13)}
+  .card.req{border-color:#eccf9a;background:#fdf8ee}
+  .crow{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .cname{font-family:${SERIF};font-size:21px;font-weight:700;color:#2b2a28;line-height:1.2}
+  .cwhen{color:#7c8676;font-size:14.5px;margin-top:7px}
+  .cloc{color:#b3ab9c;font-size:14px;margin-top:4px}
+  .creq{color:#9a6a00;font-size:13.5px;margin-top:8px}
+  .badge{font-size:12px;font-weight:700;padding:5px 13px;border-radius:16px;white-space:nowrap;flex-shrink:0}
+  .b-confirmed{background:#e3ede1;color:#4c7a58}
+  .b-pending{background:#f6e6d2;color:#a9752f}
+  .b-cancelled{background:#eceae6;color:#8a8378}
+  .b-reschedule{background:#f7ead0;color:#9a6a00}
+  .cactions{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin-top:16px}
+  .cactions .spacer{flex:1}
+  .editlink{color:#a29a8b;font-size:14px;font-weight:600;text-decoration:none;cursor:pointer}
+  .editlink:hover{color:#8a8378}
+
+  /* Drawers (reschedule / edit / add forms) */
+  .drawer{margin-top:14px}
+  .drawer[hidden]{display:none}
+  .bform{display:flex;flex-direction:column;gap:9px}
+  .bform .bin,.form-row input{padding:11px 12px;border:1px solid #e7ddcc;border-radius:11px;font-size:15px;width:100%;background:#fdfbf6;font-family:inherit}
+  .bform textarea.bin{resize:vertical}
+  .form-row{display:flex;gap:8px;flex-wrap:wrap}
+  .form-row input{flex:1;min-width:120px}
+  .gcal{display:inline-block;margin-top:6px;font-size:14px;font-weight:700;color:#b0542e;text-decoration:none}
+  .empty{color:#a29a8b;text-align:center;padding:30px 0}
+
+  /* Calendar */
+  .calbox{background:#fff;border:1px solid #efe6d6;border-radius:16px;padding:16px 14px}
+  @media(min-width:900px){ .calbox{background:transparent;border:none;border-radius:0;padding:0} }
+  .month{max-width:400px;margin:0 auto}
+  .month.second{display:none}
+  @media(min-width:900px){ .month.second{display:block;margin-top:26px;padding-top:22px;border-top:1px solid #f0e8d9} }
+  .mnav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .mtitle{font-family:${SERIF};font-size:19px;font-weight:700;color:#2b2a28;flex:1;text-align:center}
+  .mtitle.left{text-align:left}
+  .marw{width:30px;height:30px;line-height:28px;text-align:center;color:#b3ab9c;text-decoration:none;font-size:20px;border-radius:8px}
+  .marw:hover{color:#b0542e;background:#f3ece0}
+  .cdow{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:11px;font-weight:700;letter-spacing:.5px;color:#b7ae9c;margin-bottom:6px}
+  .cgrid{display:grid;grid-template-columns:repeat(7,1fr);row-gap:8px}
+  .cd{display:flex;flex-direction:column;align-items:center;min-height:44px}
+  .cn{font-family:${SERIF};font-size:15px;color:#2b2a28;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:30px;border-radius:15px}
+  .cd.muted .cn{color:#cfc6b3}
+  .cd.today .cn{background:#b0542e;color:#fff}
+  .cd.hl .cn{background:#f1d8c6;color:#a94e2a}
+  .cd.today.hl .cn{background:#b0542e;color:#fff}
+  .dot{width:5px;height:5px;border-radius:50%;background:#b0542e;margin-top:3px}
+  .cd.today .dot{background:#b0542e}
+  .callink{display:inline-block;margin-top:16px;font-size:13px;color:#b0542e;text-decoration:none}
+
+  /* Login */
+  .login{max-width:360px;margin:70px auto;text-align:center;background:#f6f0e4;border-radius:20px;padding:34px 28px}
+  .login input{width:100%;padding:12px;border:1px solid #e7ddcc;border-radius:12px;font-size:16px;margin:10px 0;background:#fff}
+  .login .btn-add{width:100%}
+  .err{color:#b0402a;font-size:14px;margin-top:8px}
 `;
 
-function shellPage(title, body) {
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${STYLE}</style></head><body>${body}</body></html>`;
+function shellPage(title, body, script = "") {
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${STYLE}</style></head><body>${body}${script}</body></html>`;
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
 function loginPage(error) {
@@ -163,15 +171,11 @@ function loginPage(error) {
       <p class="sub">Enter the owner password to continue.</p>
       <form method="POST" action="/api/owner">
         <input type="password" name="password" placeholder="Password" autofocus required>
-        <button class="btn btn-coral" type="submit">Sign in</button>
+        <button class="btn btn-add" type="submit">Sign in</button>
         ${error ? `<div class="err">${error}</div>` : ""}
       </form>
     </div>`
   );
-}
-
-function esc(s) {
-  return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
 function badge(status) {
@@ -190,96 +194,27 @@ function link(path, eventId, label, cls) {
   return `<a class="btn ${cls}" href="${url}">${label}</a>`;
 }
 
-function bookingCard(b) {
-  const meta = [
-    b.location ? esc(b.location) : "",
-    b.phone ? esc(b.phone) : "",
-    b.quote ? esc(b.quote) : "",
-  ].filter(Boolean).join(" · ");
-
-  let actions = "";
-  if (b.status === "RESCHEDULE REQUESTED") {
-    const proposed = b.proposedDate ? `Requested: <b>${esc(fmtDate(b.proposedDate))}</b>${b.proposedTime ? ` · ${esc(b.proposedTime)}` : ""}` : "";
-    actions = `<div class="meta">${proposed}</div>
-      <div class="actions">
-        ${link("/api/reschedule-approve", b.eventId, "Approve New Date", "btn-green")}
-        ${link("/api/reschedule-decline", b.eventId, "Keep Current", "btn-ghost")}
-      </div>`;
-  } else if (b.status === "PENDING") {
-    actions = `<div class="actions">
-        ${link("/api/confirm", b.eventId, "Confirm", "btn-green")}
-        ${link("/api/decline", b.eventId, "Decline", "btn-ghost")}
-        ${rescheduleForm(b)}
-      </div>`;
-  } else if (b.status === "CONFIRMED") {
-    actions = `<div class="actions">
-        ${link("/api/decline", b.eventId, "Cancel", "btn-ghost")}
-        ${rescheduleForm(b)}
-      </div>`;
-  }
-
-  return `<div class="card${b.status === "RESCHEDULE REQUESTED" ? " req" : ""}" id="b-${esc(b.eventId)}">
-    <div class="row">
-      <div>
-        <div class="date">${esc(fmtDate(b.date))}</div>
-        <div class="who">${esc(b.time ? fmtTimeRange(b.time) + " · " : "")}${esc(b.client || "—")}${b.eventType ? " · " + esc(b.eventType) : ""}</div>
-      </div>
-      ${badge(b.status)}
-    </div>
-    ${meta ? `<div class="meta">${meta}</div>` : ""}
-    ${detailsBlock(b)}
-    ${actions}
-    <div class="actions">${editForm(b)}</div>
-  </div>`;
+// "2026-07-12" -> "Sun, Jul 12"
+function shortDate(iso) {
+  const [Y, M, D] = (iso || "").split("-").map(Number);
+  if (!Y) return "";
+  return new Date(Date.UTC(Y, M - 1, D, 12)).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
 }
-
-// Expandable full-details section + a direct link to the event in Google Calendar.
-function kvRow(k, v) {
-  return v ? `<div><span class="k">${k}</span><span class="v">${v}</span></div>` : "";
-}
-function detailsBlock(b) {
-  const rows = [
-    kvRow("Client", esc(b.client)),
-    kvRow("Email", b.email ? `<a href="mailto:${esc(b.email)}">${esc(b.email)}</a>` : ""),
-    kvRow("Phone", b.phone ? `<a href="tel:${esc(String(b.phone).replace(/[^\d+]/g, ""))}">${esc(b.phone)}</a>` : ""),
-    kvRow("Event", esc(b.eventType)),
-    kvRow("Guests", esc(b.guests)),
-    kvRow("Time", esc(b.time ? fmtTimeRange(b.time) : "")),
-    kvRow("Location", esc(b.location)),
-    kvRow("Quote", esc(b.quote)),
-    kvRow("Notes", esc(b.notes)),
-  ].join("");
-  const gcal = b.htmlLink
-    ? `<a class="gcal" href="${esc(b.htmlLink)}" target="_blank" rel="noopener">📅 Open in Google Calendar</a>`
-    : "";
-  return `<details class="more">
-    <summary>Details</summary>
-    <div class="kv">${rows}</div>
-    ${gcal}
-  </details>`;
-}
-
-// Inline manual-reschedule disclosure (owner picks a new date; posts with cookie).
-function rescheduleForm(b) {
-  return `<details class="resched">
-    <summary class="btn btn-coral">Reschedule</summary>
-    <form method="POST" action="/api/reschedule-manual">
-      <input type="hidden" name="eventId" value="${esc(b.eventId)}">
-      <div class="form-row">
-        <input type="date" name="date" required>
-        <input type="time" name="time" placeholder="Start time">
-      </div>
-      <div class="form-row"><button class="btn btn-green" type="submit">Move booking</button></div>
-    </form>
-  </details>`;
+function shortWhen(b) {
+  const d = shortDate(b.date);
+  const t = b.time ? fmtTimeRange(b.time) : "";
+  return t ? `${d} · ${t}` : d;
 }
 
 // Shared booking fields for the add + edit forms. Pre-fills from `b` when editing.
 function bookingFields(b = {}) {
   const v = (x) => esc(x || "");
   const parts = (b.time || "").split(/\s*[-–]\s*/);
-  const startT = v(parts[0] || "");
-  const endT = v(parts[1] || "");
   return `
     <input class="bin" type="text" name="clientName" placeholder="Client name *" value="${v(b.client)}" required>
     <input class="bin" type="email" name="clientEmail" placeholder="Email" value="${v(b.email)}">
@@ -288,58 +223,106 @@ function bookingFields(b = {}) {
     <input class="bin" type="text" name="guestCount" placeholder="Guests" value="${v(b.guests)}">
     <div class="form-row">
       <input type="date" name="date" value="${v(b.date)}" required>
-      <input type="time" name="startTime" value="${startT}" required>
-      <input type="time" name="endTime" value="${endT}">
+      <input type="time" name="startTime" value="${v(parts[0] || "")}" required>
+      <input type="time" name="endTime" value="${v(parts[1] || "")}">
     </div>
     <input class="bin" type="text" name="location" placeholder="Location / address" value="${v(b.location)}">
     <input class="bin" type="text" name="quote" placeholder="Quote (e.g. $300)" value="${v(b.quote)}">
     <textarea class="bin" name="notes" placeholder="Notes" rows="2">${v(b.notes)}</textarea>`;
 }
 
-function addEventForm() {
-  return `<details class="add">
-    <summary class="btn btn-coral">＋ Add event</summary>
-    <form method="POST" action="/api/owner" class="bform">
-      <input type="hidden" name="action" value="create">
-      ${bookingFields()}
-      <button class="btn btn-green" type="submit">Create booking</button>
-    </form>
-  </details>`;
+function rescheduleFormInner(b) {
+  return `<form method="POST" action="/api/reschedule-manual" class="bform">
+      <input type="hidden" name="eventId" value="${esc(b.eventId)}">
+      <div class="form-row">
+        <input type="date" name="date" required>
+        <input type="time" name="time" placeholder="Start time">
+      </div>
+      <button class="btn btn-confirm" type="submit">Move booking</button>
+    </form>`;
 }
 
-function editForm(b) {
-  return `<details class="edit">
-    <summary class="btn btn-neutral">Edit</summary>
-    <form method="POST" action="/api/owner" class="bform">
+function editFormInner(b) {
+  const gcal = b.htmlLink
+    ? `<a class="gcal" href="${esc(b.htmlLink)}" target="_blank" rel="noopener">📅 Open in Google Calendar</a>`
+    : "";
+  return `<form method="POST" action="/api/owner" class="bform">
       <input type="hidden" name="action" value="edit">
       <input type="hidden" name="eventId" value="${esc(b.eventId)}">
       ${bookingFields(b)}
-      <button class="btn btn-green" type="submit">Save changes</button>
-    </form>
-  </details>`;
+      <button class="btn btn-confirm" type="submit">Save changes</button>
+      ${gcal}
+    </form>`;
 }
 
-// Shift a "YYYY-MM" month string by n months.
+function addEventForm() {
+  return `<button class="btn btn-add" data-toggle="addform">＋ Add event</button>
+    <div id="addform" class="drawer" hidden>
+      <form method="POST" action="/api/owner" class="bform">
+        <input type="hidden" name="action" value="create">
+        ${bookingFields()}
+        <button class="btn btn-confirm" type="submit">Create booking</button>
+      </form>
+    </div>`;
+}
+
+function bookingCard(b) {
+  const eid = esc(b.eventId);
+  let btns = "";
+  if (b.status === "RESCHEDULE REQUESTED") {
+    btns = `${link("/api/reschedule-approve", b.eventId, "Approve", "btn-confirm")}
+            ${link("/api/reschedule-decline", b.eventId, "Keep current", "btn-cancel")}`;
+  } else if (b.status === "PENDING") {
+    btns = `${link("/api/confirm", b.eventId, "Confirm", "btn-confirm")}
+            ${link("/api/decline", b.eventId, "Decline", "btn-cancel")}
+            <button class="btn btn-resched" data-toggle="rf-${eid}">Reschedule</button>`;
+  } else {
+    btns = `${link("/api/decline", b.eventId, "Cancel", "btn-cancel")}
+            <button class="btn btn-resched" data-toggle="rf-${eid}">Reschedule</button>`;
+  }
+
+  const requested =
+    b.status === "RESCHEDULE REQUESTED" && b.proposedDate
+      ? `<div class="creq">Requested new date: <b>${esc(shortDate(b.proposedDate))}</b>${b.proposedTime ? ` · ${esc(b.proposedTime)}` : ""}</div>`
+      : "";
+  const loc = b.location ? `<div class="cloc">${esc(b.location)}</div>` : "";
+
+  return `<div class="card${b.status === "RESCHEDULE REQUESTED" ? " req" : ""}" id="b-${eid}" data-date="${esc(b.date)}">
+    <div class="crow">
+      <div class="cname">${esc(b.client || "—")}</div>
+      ${badge(b.status)}
+    </div>
+    <div class="cwhen">${esc(shortWhen(b))}</div>
+    ${loc}
+    ${requested}
+    <div class="cactions">
+      ${btns}
+      <span class="spacer"></span>
+      <a class="editlink" href="#" data-toggle="ef-${eid}">Edit</a>
+    </div>
+    <div id="rf-${eid}" class="drawer" hidden>${rescheduleFormInner(b)}</div>
+    <div id="ef-${eid}" class="drawer" hidden>${editFormInner(b)}</div>
+  </div>`;
+}
+
+// ── Calendar ─────────────────────────────────────────────────────────────────
 function shiftYm(ym, n) {
   const [y, m] = ym.split("-").map(Number);
   const d = new Date(Date.UTC(y, m - 1 + n, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-function pillClass(status) {
-  if (status === "PENDING") return "pill-orange";
-  if (status === "RESCHEDULE REQUESTED") return "pill-yellow";
-  return "pill-green";
+function monthTitle(ym) {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
 }
 
-// Native month calendar rendered from the bookings we already loaded — always
-// shows booked events regardless of Google login, and keeps the calendar private.
-// Each event links to its card in the left column.
-function calendarPanel(bookings, ym) {
+function monthCells(bookings, ym) {
+  const pad = (n) => String(n).padStart(2, "0");
   const [y, m] = ym.split("-").map(Number);
   const firstDow = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
   const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
-  const monthLabel = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+  const prevMonthDays = new Date(Date.UTC(y, m - 1, 0)).getUTCDate();
   const today = todayPacific();
 
   const byDay = {};
@@ -349,32 +332,51 @@ function calendarPanel(bookings, ym) {
   }
 
   let cells = "";
-  for (let i = 0; i < firstDow; i++) cells += `<div class="cal-cell empty"></div>`;
-  for (let d = 1; d <= daysInMonth; d++) {
-    const ds = `${ym}-${String(d).padStart(2, "0")}`;
-    const items = (byDay[ds] || []).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
-    const pills = items
-      .map((b) => {
-        const name = (b.client || "Booking").split(" ")[0];
-        const tip = `${b.time ? fmtTimeRange(b.time) + " · " : ""}${b.client || ""}`.trim();
-        return `<a class="cal-pill ${pillClass(b.status)}" href="#b-${esc(b.eventId)}" title="${esc(tip)}">${esc(name)}</a>`;
-      })
-      .join("");
-    cells += `<div class="cal-cell${ds === today ? " today" : ""}"><div class="cal-d">${d}</div>${pills}</div>`;
+  for (let i = firstDow - 1; i >= 0; i--) {
+    cells += `<div class="cd muted"><span class="cn">${prevMonthDays - i}</span></div>`;
   }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = `${ym}-${pad(d)}`;
+    const items = byDay[ds] || [];
+    const has = items.length > 0;
+    const cls = `cd${ds === today ? " today" : ""}`;
+    const attr = has ? ` data-date="${ds}"` : "";
+    const num = has
+      ? `<a class="cn" href="#b-${esc(items[0].eventId)}">${d}</a>`
+      : `<span class="cn">${d}</span>`;
+    cells += `<div class="${cls}"${attr}>${num}${has ? `<span class="dot"></span>` : ""}</div>`;
+  }
+  const trailing = (7 - ((firstDow + daysInMonth) % 7)) % 7;
+  for (let d = 1; d <= trailing; d++) {
+    cells += `<div class="cd muted"><span class="cn">${d}</span></div>`;
+  }
+  return cells;
+}
 
+function renderMonth(bookings, ym, nav) {
+  const dow = ["S", "M", "T", "W", "T", "F", "S"].map((x) => `<div>${x}</div>`).join("");
+  const head = nav
+    ? `<div class="mnav">
+        <a class="marw" href="?ym=${shiftYm(ym, -1)}" title="Previous month">‹</a>
+        <span class="mtitle">${monthTitle(ym)}</span>
+        <a class="marw" href="?ym=${shiftYm(ym, 1)}" title="Next month">›</a>
+      </div>`
+    : `<div class="mnav"><span class="mtitle left">${monthTitle(ym)}</span></div>`;
+  return `<div class="month${nav ? "" : " second"}">
+    ${head}
+    <div class="cdow">${dow}</div>
+    <div class="cgrid">${monthCells(bookings, ym)}</div>
+  </div>`;
+}
+
+// Native calendar: current month (with nav) + next month (desktop only).
+function calendarPanel(bookings, ym) {
   const gcal = CALENDAR_ID
     ? `<a class="callink" href="https://calendar.google.com/calendar/r/month" target="_blank" rel="noopener">Open full Google Calendar ↗</a>`
     : "";
-
-  return `<div class="calpanel">
-    <div class="calnav">
-      <a href="?ym=${shiftYm(ym, -1)}" title="Previous month">‹</a>
-      <span class="t">${monthLabel}</span>
-      <a href="?ym=${shiftYm(ym, 1)}" title="Next month">›</a>
-    </div>
-    <div class="cal-dow"><div>S</div><div>M</div><div>T</div><div>W</div><div>T</div><div>F</div><div>S</div></div>
-    <div class="cal-grid">${cells}</div>
+  return `<div class="calbox">
+    ${renderMonth(bookings, ym, true)}
+    ${renderMonth(bookings, shiftYm(ym, 1), false)}
     ${gcal}
   </div>`;
 }
@@ -382,6 +384,28 @@ function calendarPanel(bookings, ym) {
 function todayPacific() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
+
+// Two-way hover link between cards and calendar days + form drawer toggles.
+const DASHBOARD_SCRIPT = `<script>
+(function(){
+  document.addEventListener('click',function(e){
+    var t=e.target.closest('[data-toggle]'); if(!t) return;
+    e.preventDefault();
+    var el=document.getElementById(t.getAttribute('data-toggle')); if(el) el.hidden=!el.hidden;
+  });
+  function all(s){return Array.prototype.slice.call(document.querySelectorAll(s));}
+  var cards=all('.card[data-date]'), days=all('.cd[data-date]');
+  function hl(date,on){
+    cards.forEach(function(c){ if(c.getAttribute('data-date')===date) c.classList.toggle('hl',on); });
+    days.forEach(function(d){ if(d.getAttribute('data-date')===date) d.classList.toggle('hl',on); });
+  }
+  cards.concat(days).forEach(function(el){
+    var date=el.getAttribute('data-date');
+    el.addEventListener('mouseenter',function(){hl(date,true);});
+    el.addEventListener('mouseleave',function(){hl(date,false);});
+  });
+})();
+</script>`;
 
 export function dashboardPage(bookings, ym) {
   const today = todayPacific();
@@ -391,21 +415,33 @@ export function dashboardPage(bookings, ym) {
     .filter((b) => b.status !== "RESCHEDULE REQUESTED" && b.status !== "CANCELLED" && b.date >= today)
     .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
 
-  const cal = calendarPanel(bookings, month);
-  const body = `<div class="wrap">
-    <h1>🎨 Bookings</h1>
-    <p class="sub">${upcoming.length} upcoming · ${requests.length} reschedule request${requests.length === 1 ? "" : "s"}</p>
-    <div class="grid has-cal">
-      <div class="col-list">
-        <div class="addbar">${addEventForm()}</div>
-        ${requests.length ? `<div class="sec">Reschedule Requests</div>${requests.map(bookingCard).join("")}` : ""}
-        <div class="sec">Upcoming Events</div>
-        ${upcoming.length ? upcoming.map(bookingCard).join("") : `<div class="empty">No upcoming bookings.</div>`}
-      </div>
-      <div class="col-cal">${cal}</div>
+  // Group the upcoming list by month with a header before each group.
+  let list = "";
+  let lastYm = "";
+  for (const b of upcoming) {
+    const g = b.date.slice(0, 7);
+    if (g !== lastYm) {
+      list += `<div class="sec">${monthTitle(g)}</div>`;
+      lastYm = g;
+    }
+    list += bookingCard(b);
+  }
+  if (!upcoming.length) list = `<div class="empty">No upcoming bookings.</div>`;
+
+  const requestsHtml = requests.length
+    ? `<div class="sec">Reschedule Requests</div>${requests.map(bookingCard).join("")}`
+    : "";
+
+  const body = `<div class="app">
+    <div class="a-head">
+      <h1>🎨 Bookings</h1>
+      <p class="sub">${upcoming.length} upcoming · ${requests.length} reschedule request${requests.length === 1 ? "" : "s"}</p>
     </div>
+    <div class="a-add">${addEventForm()}</div>
+    <div class="a-cal">${calendarPanel(bookings, month)}</div>
+    <div class="a-list">${requestsHtml}${list}</div>
   </div>`;
-  return shellPage("Bookings · Face Painting CA", body);
+  return shellPage("Bookings · Face Painting CA", body, DASHBOARD_SCRIPT);
 }
 
 // Performs a create/edit action from the dashboard, then mirrors the result to
