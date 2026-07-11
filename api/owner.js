@@ -83,6 +83,17 @@ const STYLE = `
   .btn-ghost{background:#f1f1f1;color:#b91c1c}
   details.resched{margin-top:12px}
   details.resched summary{font-size:14px;color:#55606b;cursor:pointer}
+  details.more{margin-top:12px;border-top:1px solid #efe7db;padding-top:10px}
+  details.more summary{font-size:13px;font-weight:700;color:#55606b;cursor:pointer;list-style:none}
+  details.more summary::-webkit-details-marker{display:none}
+  details.more summary::before{content:"\\25B8  ";color:#9aa1a9}
+  details.more[open] summary::before{content:"\\25BE  "}
+  .kv{margin-top:10px;font-size:14px;line-height:1.5}
+  .kv div{display:flex;gap:8px;padding:3px 0}
+  .kv .k{color:#9aa1a9;min-width:70px}
+  .kv .v{color:#2d3540;word-break:break-word;flex:1}
+  .kv a{color:#2f6fd6;text-decoration:none}
+  .gcal{display:inline-block;margin-top:12px;font-size:14px;font-weight:700;color:#2f6fd6;text-decoration:none}
   .form-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
   .form-row input{flex:1;min-width:130px;padding:10px;border:1px solid #efe7db;border-radius:10px;font-size:15px}
   .empty{color:#9aa1a9;text-align:center;padding:30px 0}
@@ -96,6 +107,9 @@ const STYLE = `
     .card.req{background:#2c2a1f;border-color:#5c4a1e}
     .form-row input,.login input{background:#1c2029;border-color:#333b47;color:#e6e8ec}
     .btn-ghost{background:#333b47;color:#ff9b8f}
+    details.more{border-color:#333b47}
+    .kv .v{color:#e6e8ec}
+    .kv a,.gcal{color:#7fb0ff}
   }
 `;
 
@@ -175,8 +189,35 @@ function bookingCard(b) {
       ${badge(b.status)}
     </div>
     ${meta ? `<div class="meta">${meta}</div>` : ""}
+    ${detailsBlock(b)}
     ${actions}
   </div>`;
+}
+
+// Expandable full-details section + a direct link to the event in Google Calendar.
+function kvRow(k, v) {
+  return v ? `<div><span class="k">${k}</span><span class="v">${v}</span></div>` : "";
+}
+function detailsBlock(b) {
+  const rows = [
+    kvRow("Client", esc(b.client)),
+    kvRow("Email", b.email ? `<a href="mailto:${esc(b.email)}">${esc(b.email)}</a>` : ""),
+    kvRow("Phone", b.phone ? `<a href="tel:${esc(String(b.phone).replace(/[^\d+]/g, ""))}">${esc(b.phone)}</a>` : ""),
+    kvRow("Event", esc(b.eventType)),
+    kvRow("Guests", esc(b.guests)),
+    kvRow("Time", esc(b.time ? fmtTimeRange(b.time) : "")),
+    kvRow("Location", esc(b.location)),
+    kvRow("Quote", esc(b.quote)),
+    kvRow("Notes", esc(b.notes)),
+  ].join("");
+  const gcal = b.htmlLink
+    ? `<a class="gcal" href="${esc(b.htmlLink)}" target="_blank" rel="noopener">📅 Open in Google Calendar</a>`
+    : "";
+  return `<details class="more">
+    <summary>Details</summary>
+    <div class="kv">${rows}</div>
+    ${gcal}
+  </details>`;
 }
 
 // Inline manual-reschedule disclosure (owner picks a new date; posts with cookie).

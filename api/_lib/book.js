@@ -114,6 +114,7 @@ function parseEventToBooking(e) {
     location: descField(description, 'Location') || e.location || '',
     quote: descField(description, 'Quote'),
     notes: descField(description, 'Notes'),
+    htmlLink: e.htmlLink || '',
   };
 }
 
