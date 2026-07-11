@@ -438,6 +438,101 @@ export async function moveBooking(eventId, { date, time }) {
   return parseEventToBooking(updated);
 }
 
+// Builds the structured "Client: … / Email: …" description block that
+// parseEventToBooking reads back out. `footer` is the attribution line.
+function buildBookingDescription(d, footer) {
+  return [
+    d.clientName ? `Client: ${d.clientName}` : '',
+    d.clientEmail ? `Email: ${d.clientEmail}` : '',
+    d.clientPhone ? `Phone: ${d.clientPhone}` : '',
+    d.eventType ? `Event Type: ${d.eventType}` : '',
+    d.guestCount ? `Guests: ${d.guestCount}` : '',
+    d.location ? `Location: ${d.location}` : '',
+    d.quote ? `Quote: ${d.quote}` : '',
+    d.notes ? `Notes: ${d.notes}` : '',
+    '',
+    footer,
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+/**
+ * Creates a booking straight from the owner dashboard: a CONFIRMED (green)
+ * calendar event with the full structured description, and NO client invite/email
+ * (the owner is logging an event they already know about). Returns the normalized
+ * booking. Defaults the end time to start + 2h when not given.
+ */
+export async function createOwnerBooking(d) {
+  const auth = getAuthClient();
+  const calendarId = process.env.GOOGLE_CALENDAR_ID;
+  const calendar = google.calendar({ version: 'v3', auth });
+
+  const endTime = d.endTime || fromMin(toMin(d.startTime) + 120);
+
+  const event = {
+    summary: `Face Painting - ${d.clientName}${d.eventType ? ` (${d.eventType})` : ''}`,
+    description: buildBookingDescription(d, 'Added by the team'),
+    location: d.location || '',
+    start: { dateTime: `${d.date}T${d.startTime}:00`, timeZone: 'America/Los_Angeles' },
+    end: { dateTime: `${d.date}T${endTime}:00`, timeZone: 'America/Los_Angeles' },
+    colorId: '10', // green = confirmed
+  };
+
+  const { data: created } = await calendar.events.insert({
+    calendarId,
+    resource: event,
+    sendUpdates: 'none',
+  });
+  return parseEventToBooking(created);
+}
+
+/**
+ * Updates an existing booking's details in place from the owner dashboard edit
+ * form. Preserves PENDING/CONFIRMED state and any reschedule request; never
+ * sends a client invite. Returns the normalized booking.
+ */
+export async function updateBooking(eventId, d) {
+  const auth = getAuthClient();
+  const calendarId = process.env.GOOGLE_CALENDAR_ID;
+  const calendar = google.calendar({ version: 'v3', auth });
+
+  const { data: event } = await calendar.events.get({ calendarId, eventId });
+  const wasPending = /^\[pending\]/i.test(event.summary || '') || event.colorId === '6';
+  const footer = /booked by sky/i.test(event.description || '')
+    ? "Booked by Sky, Face Painting California's assistant"
+    : 'Added by the team';
+
+  const body = buildBookingDescription(d, footer);
+  const description = wasPending
+    ? [
+        '⚠️ AWAITING CONFIRMATION - Artist availability needs to be verified',
+        '⚠️ Client has NOT been sent a calendar invite yet',
+        '',
+        body,
+      ].join('\n')
+    : body;
+
+  const patch = {
+    summary: `${wasPending ? '[PENDING] ' : ''}Face Painting - ${d.clientName}${d.eventType ? ` (${d.eventType})` : ''}`,
+    description,
+    location: d.location || '',
+  };
+  if (d.date && d.startTime) {
+    const endTime = d.endTime || fromMin(toMin(d.startTime) + 120);
+    patch.start = { dateTime: `${d.date}T${d.startTime}:00`, timeZone: 'America/Los_Angeles' };
+    patch.end = { dateTime: `${d.date}T${endTime}:00`, timeZone: 'America/Los_Angeles' };
+  }
+
+  const { data: updated } = await calendar.events.patch({
+    calendarId,
+    eventId,
+    resource: patch,
+    sendUpdates: 'none',
+  });
+  return parseEventToBooking(updated);
+}
+
 /**
  * Creates a Google Calendar event for a face painting booking.
  * If pending=true, creates a [PENDING] event with orange color and no invite.

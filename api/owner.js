@@ -1,5 +1,6 @@
 import crypto from "crypto";
-import { listCalendarBookings } from "./_lib/book.js";
+import { listCalendarBookings, createOwnerBooking, updateBooking } from "./_lib/book.js";
+import { syncBookingsToSheet } from "./_lib/sheets.js";
 import { fmtDate, fmtTimeRange } from "./_lib/email.js";
 
 const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
@@ -95,7 +96,14 @@ const STYLE = `
   .kv a{color:#2f6fd6;text-decoration:none}
   .gcal{display:inline-block;margin-top:12px;font-size:14px;font-weight:700;color:#2f6fd6;text-decoration:none}
   .form-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
-  .form-row input{flex:1;min-width:130px;padding:10px;border:1px solid #efe7db;border-radius:10px;font-size:15px}
+  .form-row input{flex:1;min-width:120px;padding:10px;border:1px solid #efe7db;border-radius:10px;font-size:15px}
+  details.add,details.edit{margin-top:12px}
+  details.add>summary,details.edit>summary{display:inline-block}
+  .bform{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+  .bform .bin{padding:10px;border:1px solid #efe7db;border-radius:10px;font-size:15px;width:100%}
+  .bform textarea.bin{resize:vertical;font-family:inherit}
+  .btn-neutral{background:#f1f1f1;color:#55606b}
+  .addbar{margin:2px 0 18px}
   .empty{color:#9aa1a9;text-align:center;padding:30px 0}
   .login{max-width:340px;margin:80px auto;text-align:center}
   .login input{width:100%;padding:12px;border:1px solid #efe7db;border-radius:12px;font-size:16px;margin:10px 0}
@@ -105,8 +113,9 @@ const STYLE = `
     body{background:#1c2029;color:#e6e8ec}
     .card{background:#252b36;border-color:#333b47}
     .card.req{background:#2c2a1f;border-color:#5c4a1e}
-    .form-row input,.login input{background:#1c2029;border-color:#333b47;color:#e6e8ec}
+    .form-row input,.login input,.bform .bin{background:#1c2029;border-color:#333b47;color:#e6e8ec}
     .btn-ghost{background:#333b47;color:#ff9b8f}
+    .btn-neutral{background:#333b47;color:#c8ccd2}
     details.more{border-color:#333b47}
     .kv .v{color:#e6e8ec}
     .kv a,.gcal{color:#7fb0ff}
@@ -191,6 +200,7 @@ function bookingCard(b) {
     ${meta ? `<div class="meta">${meta}</div>` : ""}
     ${detailsBlock(b)}
     ${actions}
+    <div class="actions">${editForm(b)}</div>
   </div>`;
 }
 
@@ -235,6 +245,51 @@ function rescheduleForm(b) {
   </details>`;
 }
 
+// Shared booking fields for the add + edit forms. Pre-fills from `b` when editing.
+function bookingFields(b = {}) {
+  const v = (x) => esc(x || "");
+  const parts = (b.time || "").split(/\s*[-–]\s*/);
+  const startT = v(parts[0] || "");
+  const endT = v(parts[1] || "");
+  return `
+    <input class="bin" type="text" name="clientName" placeholder="Client name *" value="${v(b.client)}" required>
+    <input class="bin" type="email" name="clientEmail" placeholder="Email" value="${v(b.email)}">
+    <input class="bin" type="tel" name="clientPhone" placeholder="Phone" value="${v(b.phone)}">
+    <input class="bin" type="text" name="eventType" placeholder="Event type (e.g. Birthday)" value="${v(b.eventType)}">
+    <input class="bin" type="text" name="guestCount" placeholder="Guests" value="${v(b.guests)}">
+    <div class="form-row">
+      <input type="date" name="date" value="${v(b.date)}" required>
+      <input type="time" name="startTime" value="${startT}" required>
+      <input type="time" name="endTime" value="${endT}">
+    </div>
+    <input class="bin" type="text" name="location" placeholder="Location / address" value="${v(b.location)}">
+    <input class="bin" type="text" name="quote" placeholder="Quote (e.g. $300)" value="${v(b.quote)}">
+    <textarea class="bin" name="notes" placeholder="Notes" rows="2">${v(b.notes)}</textarea>`;
+}
+
+function addEventForm() {
+  return `<details class="add">
+    <summary class="btn btn-coral">＋ Add event</summary>
+    <form method="POST" action="/api/owner" class="bform">
+      <input type="hidden" name="action" value="create">
+      ${bookingFields()}
+      <button class="btn btn-green" type="submit">Create booking</button>
+    </form>
+  </details>`;
+}
+
+function editForm(b) {
+  return `<details class="edit">
+    <summary class="btn btn-neutral">Edit</summary>
+    <form method="POST" action="/api/owner" class="bform">
+      <input type="hidden" name="action" value="edit">
+      <input type="hidden" name="eventId" value="${esc(b.eventId)}">
+      ${bookingFields(b)}
+      <button class="btn btn-green" type="submit">Save changes</button>
+    </form>
+  </details>`;
+}
+
 function todayPacific() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
@@ -249,11 +304,45 @@ export function dashboardPage(bookings) {
   const body = `<div class="wrap">
     <h1>🎨 Bookings</h1>
     <p class="sub">${upcoming.length} upcoming · ${requests.length} reschedule request${requests.length === 1 ? "" : "s"}</p>
+    <div class="addbar">${addEventForm()}</div>
     ${requests.length ? `<div class="sec">Reschedule Requests</div>${requests.map(bookingCard).join("")}` : ""}
     <div class="sec">Upcoming Events</div>
     ${upcoming.length ? upcoming.map(bookingCard).join("") : `<div class="empty">No upcoming bookings.</div>`}
   </div>`;
   return shellPage("Bookings · Face Painting CA", body);
+}
+
+// Performs a create/edit action from the dashboard, then mirrors the result to
+// the sheet. Writes go straight to Google Calendar (the source of truth).
+async function handleAction(body) {
+  const d = {
+    clientName: (body.clientName || "").trim(),
+    clientEmail: (body.clientEmail || "").trim(),
+    clientPhone: (body.clientPhone || "").trim(),
+    eventType: (body.eventType || "").trim(),
+    guestCount: (body.guestCount || "").trim(),
+    date: (body.date || "").trim(),
+    startTime: (body.startTime || "").trim(),
+    endTime: (body.endTime || "").trim(),
+    location: (body.location || "").trim(),
+    quote: (body.quote || "").trim(),
+    notes: (body.notes || "").trim(),
+  };
+
+  if (body.action === "create") {
+    if (!d.clientName || !/^\d{4}-\d{2}-\d{2}$/.test(d.date) || !d.startTime) return;
+    const booking = await createOwnerBooking(d);
+    await syncBookingsToSheet([booking], { markCancellations: false }).catch((e) =>
+      console.error("Sheet sync (create) failed:", e)
+    );
+  } else if (body.action === "edit") {
+    const eventId = (body.eventId || "").trim();
+    if (!eventId || !d.clientName) return;
+    const booking = await updateBooking(eventId, d);
+    await syncBookingsToSheet([booking], { markCancellations: false }).catch((e) =>
+      console.error("Sheet sync (edit) failed:", e)
+    );
+  }
 }
 
 // ── Handler ──────────────────────────────────────────────────────────────────
@@ -268,7 +357,6 @@ export default async function handler(req, res) {
     return html(503, shellPage("Setup needed", `<div class="login"><h1>Setup needed</h1><p class="sub">Set the <code>OWNER_DASHBOARD_PASSWORD</code> environment variable to enable this page.</p></div>`));
   }
 
-  // Login attempt.
   if (req.method === "POST") {
     let body;
     try {
@@ -276,6 +364,22 @@ export default async function handler(req, res) {
     } catch {
       body = {};
     }
+
+    // An authed create/edit action (from the Add event / Edit forms).
+    if (body.action) {
+      if (!isAuthed(req)) return html(200, loginPage("Please sign in again."));
+      try {
+        await handleAction(body);
+      } catch (error) {
+        console.error("Owner action error:", error);
+      }
+      // Redirect so a refresh doesn't resubmit the form.
+      res.statusCode = 303;
+      res.setHeader("Location", "/api/owner");
+      return res.end();
+    }
+
+    // Otherwise it's a login attempt.
     if (!passwordMatches(body.password)) {
       return html(401, loginPage("Incorrect password. Try again."));
     }
