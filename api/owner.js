@@ -110,11 +110,21 @@ const STYLE = `
   .bform textarea.bin{resize:vertical;font-family:inherit}
   .btn-neutral{background:#f1f1f1;color:#55606b}
   .addbar{margin:2px 0 18px}
-  .calhead{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#9aa1a9;margin:0 0 10px}
-  .calframe{position:relative;border:1px solid #efe7db;border-radius:14px;overflow:hidden;background:#fff}
-  .calframe iframe{display:block;width:100%;height:560px;border:0}
-  @media(min-width:900px){ .grid.has-cal .calframe iframe{height:calc(100vh - 96px);min-height:520px} }
-  .calnote{font-size:12px;color:#9aa1a9;margin-top:8px;line-height:1.5}
+  .calpanel{border:1px solid #efe7db;border-radius:16px;background:#fff;padding:14px}
+  .calnav{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .calnav .t{font-size:15px;font-weight:800;color:#2d3540}
+  .calnav a{display:inline-block;width:32px;height:32px;line-height:30px;text-align:center;border:1px solid #efe7db;border-radius:8px;color:#55606b;text-decoration:none;font-size:16px}
+  .cal-dow{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:11px;font-weight:800;color:#9aa1a9;margin-bottom:4px}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+  .cal-cell{min-height:62px;border:1px solid #f0eadf;border-radius:8px;padding:3px}
+  .cal-cell.empty{border:none;background:transparent}
+  .cal-cell.today{border-color:#e8836b;background:#fdf3ef}
+  .cal-d{font-size:11px;font-weight:700;color:#9aa1a9;margin-bottom:2px}
+  .cal-pill{display:block;border-radius:5px;padding:1px 4px;margin-bottom:2px;font-size:10px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-decoration:none}
+  .pill-green{background:#e6f4ea;color:#1e7a3c}
+  .pill-orange{background:#fdeee0;color:#b5651d}
+  .pill-yellow{background:#fff3d6;color:#9a6a00}
+  .callink{display:inline-block;margin-top:12px;font-size:13px;color:#2f6fd6;text-decoration:none}
   .empty{color:#9aa1a9;text-align:center;padding:30px 0}
   .login{max-width:340px;margin:80px auto;text-align:center}
   .login input{width:100%;padding:12px;border:1px solid #efe7db;border-radius:12px;font-size:16px;margin:10px 0}
@@ -129,7 +139,15 @@ const STYLE = `
     .btn-neutral{background:#333b47;color:#c8ccd2}
     details.more{border-color:#333b47}
     .kv .v{color:#e6e8ec}
-    .kv a,.gcal{color:#7fb0ff}
+    .kv a,.gcal,.callink{color:#7fb0ff}
+    .calpanel{background:#252b36;border-color:#333b47}
+    .calnav .t{color:#e6e8ec}
+    .calnav a{border-color:#333b47;color:#c8ccd2}
+    .cal-cell{border-color:#333b47}
+    .cal-cell.today{background:#2f2622;border-color:#e8836b}
+    .pill-green{background:#1e3a28;color:#7fd39a}
+    .pill-orange{background:#3a2c1c;color:#e6a86b}
+    .pill-yellow{background:#3a341c;color:#e0c979}
   }
 `;
 
@@ -200,7 +218,7 @@ function bookingCard(b) {
       </div>`;
   }
 
-  return `<div class="card${b.status === "RESCHEDULE REQUESTED" ? " req" : ""}">
+  return `<div class="card${b.status === "RESCHEDULE REQUESTED" ? " req" : ""}" id="b-${esc(b.eventId)}">
     <div class="row">
       <div>
         <div class="date">${esc(fmtDate(b.date))}</div>
@@ -301,40 +319,90 @@ function editForm(b) {
   </details>`;
 }
 
-// Embedded Google Calendar panel (right column on desktop, stacked below the
-// list on mobile). Loads via the viewer's own Google session, so it renders when
-// the owner is signed into Google with access (we keep the calendar private).
-function calendarPanel() {
-  if (!CALENDAR_ID) return "";
-  const src = `https://calendar.google.com/calendar/embed?src=${encodeURIComponent(CALENDAR_ID)}&ctz=America%2FLos_Angeles&mode=MONTH&showTitle=0&showPrint=0&showTabs=1&showCalendars=0`;
-  return `<div class="calhead">📅 Calendar</div>
-    <div class="calframe"><iframe src="${src}" loading="lazy" title="Google Calendar"></iframe></div>
-    <div class="calnote">If this looks empty, open it on a device where you're signed into the Google account that owns this calendar.</div>`;
+// Shift a "YYYY-MM" month string by n months.
+function shiftYm(ym, n) {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + n, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function pillClass(status) {
+  if (status === "PENDING") return "pill-orange";
+  if (status === "RESCHEDULE REQUESTED") return "pill-yellow";
+  return "pill-green";
+}
+
+// Native month calendar rendered from the bookings we already loaded — always
+// shows booked events regardless of Google login, and keeps the calendar private.
+// Each event links to its card in the left column.
+function calendarPanel(bookings, ym) {
+  const [y, m] = ym.split("-").map(Number);
+  const firstDow = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
+  const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const monthLabel = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+  const today = todayPacific();
+
+  const byDay = {};
+  for (const b of bookings) {
+    if (b.status === "CANCELLED" || !b.date || b.date.slice(0, 7) !== ym) continue;
+    (byDay[b.date] ||= []).push(b);
+  }
+
+  let cells = "";
+  for (let i = 0; i < firstDow; i++) cells += `<div class="cal-cell empty"></div>`;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = `${ym}-${String(d).padStart(2, "0")}`;
+    const items = (byDay[ds] || []).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+    const pills = items
+      .map((b) => {
+        const name = (b.client || "Booking").split(" ")[0];
+        const tip = `${b.time ? fmtTimeRange(b.time) + " · " : ""}${b.client || ""}`.trim();
+        return `<a class="cal-pill ${pillClass(b.status)}" href="#b-${esc(b.eventId)}" title="${esc(tip)}">${esc(name)}</a>`;
+      })
+      .join("");
+    cells += `<div class="cal-cell${ds === today ? " today" : ""}"><div class="cal-d">${d}</div>${pills}</div>`;
+  }
+
+  const gcal = CALENDAR_ID
+    ? `<a class="callink" href="https://calendar.google.com/calendar/r/month" target="_blank" rel="noopener">Open full Google Calendar ↗</a>`
+    : "";
+
+  return `<div class="calpanel">
+    <div class="calnav">
+      <a href="?ym=${shiftYm(ym, -1)}" title="Previous month">‹</a>
+      <span class="t">${monthLabel}</span>
+      <a href="?ym=${shiftYm(ym, 1)}" title="Next month">›</a>
+    </div>
+    <div class="cal-dow"><div>S</div><div>M</div><div>T</div><div>W</div><div>T</div><div>F</div><div>S</div></div>
+    <div class="cal-grid">${cells}</div>
+    ${gcal}
+  </div>`;
 }
 
 function todayPacific() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
 
-export function dashboardPage(bookings) {
+export function dashboardPage(bookings, ym) {
   const today = todayPacific();
+  const month = /^\d{4}-\d{2}$/.test(ym || "") ? ym : today.slice(0, 7);
   const requests = bookings.filter((b) => b.status === "RESCHEDULE REQUESTED");
   const upcoming = bookings
     .filter((b) => b.status !== "RESCHEDULE REQUESTED" && b.status !== "CANCELLED" && b.date >= today)
     .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
 
-  const cal = calendarPanel();
+  const cal = calendarPanel(bookings, month);
   const body = `<div class="wrap">
     <h1>🎨 Bookings</h1>
     <p class="sub">${upcoming.length} upcoming · ${requests.length} reschedule request${requests.length === 1 ? "" : "s"}</p>
-    <div class="grid${cal ? " has-cal" : ""}">
+    <div class="grid has-cal">
       <div class="col-list">
         <div class="addbar">${addEventForm()}</div>
         ${requests.length ? `<div class="sec">Reschedule Requests</div>${requests.map(bookingCard).join("")}` : ""}
         <div class="sec">Upcoming Events</div>
         ${upcoming.length ? upcoming.map(bookingCard).join("") : `<div class="empty">No upcoming bookings.</div>`}
       </div>
-      ${cal ? `<div class="col-cal">${cal}</div>` : ""}
+      <div class="col-cal">${cal}</div>
     </div>
   </div>`;
   return shellPage("Bookings · Face Painting CA", body);
@@ -418,8 +486,9 @@ export default async function handler(req, res) {
   }
 
   try {
+    const ym = new URL(req.url, "http://localhost").searchParams.get("ym");
     const bookings = await listCalendarBookings();
-    return html(200, dashboardPage(bookings));
+    return html(200, dashboardPage(bookings, ym));
   } catch (error) {
     console.error("Owner dashboard error:", error);
     return html(500, shellPage("Error", `<div class="login"><h1>Something went wrong</h1><p class="sub">Couldn't load bookings. Check the server logs.</p></div>`));
