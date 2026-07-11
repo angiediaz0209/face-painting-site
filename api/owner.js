@@ -5,6 +5,7 @@ import { fmtDate, fmtTimeRange } from "./_lib/email.js";
 
 const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
 const OWNER_PASSWORD = process.env.OWNER_DASHBOARD_PASSWORD || "";
+const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || "";
 
 // Per-event token for the one-click action links (same scheme as the emails).
 function eventToken(eventId) {
@@ -104,6 +105,14 @@ const STYLE = `
   .bform textarea.bin{resize:vertical;font-family:inherit}
   .btn-neutral{background:#f1f1f1;color:#55606b}
   .addbar{margin:2px 0 18px}
+  details.cal{margin:2px 0 18px}
+  details.cal>summary{font-size:14px;font-weight:700;color:#55606b;cursor:pointer;list-style:none}
+  details.cal>summary::-webkit-details-marker{display:none}
+  details.cal>summary::before{content:"\\25B8  ";color:#9aa1a9}
+  details.cal[open]>summary::before{content:"\\25BE  "}
+  .calframe{position:relative;margin-top:12px;border:1px solid #efe7db;border-radius:14px;overflow:hidden;background:#fff}
+  .calframe iframe{display:block;width:100%;height:600px;border:0}
+  .calnote{font-size:12px;color:#9aa1a9;margin-top:8px;line-height:1.5}
   .empty{color:#9aa1a9;text-align:center;padding:30px 0}
   .login{max-width:340px;margin:80px auto;text-align:center}
   .login input{width:100%;padding:12px;border:1px solid #efe7db;border-radius:12px;font-size:16px;margin:10px 0}
@@ -290,6 +299,19 @@ function editForm(b) {
   </details>`;
 }
 
+// Collapsible embedded Google Calendar. Loads via the viewer's own Google
+// session, so it renders when the owner is signed into Google with access to
+// this calendar (we deliberately don't make the calendar public).
+function calendarEmbed() {
+  if (!CALENDAR_ID) return "";
+  const src = `https://calendar.google.com/calendar/embed?src=${encodeURIComponent(CALENDAR_ID)}&ctz=America%2FLos_Angeles&mode=MONTH&showTitle=0&showPrint=0&showTabs=1&showCalendars=0`;
+  return `<details class="cal">
+    <summary>📅 Calendar view</summary>
+    <div class="calframe"><iframe src="${src}" loading="lazy" title="Google Calendar"></iframe></div>
+    <div class="calnote">If this looks empty, open it on a device where you're signed into the Google account that owns this calendar.</div>
+  </details>`;
+}
+
 function todayPacific() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
@@ -305,6 +327,7 @@ export function dashboardPage(bookings) {
     <h1>🎨 Bookings</h1>
     <p class="sub">${upcoming.length} upcoming · ${requests.length} reschedule request${requests.length === 1 ? "" : "s"}</p>
     <div class="addbar">${addEventForm()}</div>
+    ${calendarEmbed()}
     ${requests.length ? `<div class="sec">Reschedule Requests</div>${requests.map(bookingCard).join("")}` : ""}
     <div class="sec">Upcoming Events</div>
     ${upcoming.length ? upcoming.map(bookingCard).join("") : `<div class="empty">No upcoming bookings.</div>`}
