@@ -1,15 +1,10 @@
 import crypto from "crypto";
-import { confirmBooking } from "./book.js";
+import { applyReschedule } from "./book.js";
 import { setBookingStatus } from "./sheets.js";
 import { sendEmail, clientConfirmationHtml } from "./email.js";
 
-// Must match the scheme in api/notify.js so the emailed link verifies.
 const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
 const BASE_URL = process.env.APP_BASE_URL || "https://face-painting-site.vercel.app";
-
-function statusUrl(eventId) {
-  return `${BASE_URL}/api/status?eventId=${encodeURIComponent(eventId)}&token=${expectedToken(eventId)}`;
-}
 
 function expectedToken(eventId) {
   return crypto
@@ -17,6 +12,10 @@ function expectedToken(eventId) {
     .update(eventId)
     .digest("hex")
     .slice(0, 32);
+}
+
+function statusUrl(eventId) {
+  return `${BASE_URL}/api/status?eventId=${encodeURIComponent(eventId)}&token=${expectedToken(eventId)}`;
 }
 
 function page(body) {
@@ -38,22 +37,26 @@ export default async function handler(req, res) {
   };
 
   if (!eventId || !token) {
-    return send(400, "<h2>Incomplete link</h2><p>This approval link is missing information.</p>");
+    return send(400, "<h2>Incomplete link</h2><p>This link is missing information.</p>");
   }
 
-  // Constant-time compare to avoid token guessing.
   const expected = expectedToken(eventId);
   const ok =
     token.length === expected.length &&
     crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected));
   if (!ok) {
-    return send(403, "<h2>Invalid link</h2><p>This approval link isn't valid.</p>");
+    return send(403, "<h2>Invalid link</h2><p>This link isn't valid.</p>");
   }
 
   try {
-    const result = await confirmBooking(eventId);
+    const result = await applyReschedule(eventId);
+    if (!result) {
+      return send(
+        200,
+        `<h2>No reschedule pending</h2><p>There's no open reschedule request on this booking — it may have already been handled.</p>`
+      );
+    }
 
-    // Await both side effects so they finish before the function is frozen.
     await Promise.allSettled([
       setBookingStatus(eventId, "CONFIRMED").catch((e) =>
         console.error("Sheet status update failed:", e)
@@ -61,7 +64,7 @@ export default async function handler(req, res) {
       result.clientEmail
         ? sendEmail({
             to: result.clientEmail,
-            subject: "You're all booked with Face Painting California! 🎨",
+            subject: "Your Face Painting California booking has been moved 🎨",
             html: clientConfirmationHtml({
               client: result.clientName,
               date: result.date,
@@ -75,22 +78,22 @@ export default async function handler(req, res) {
     ]);
 
     const invite = result.clientEmail
-      ? `<p>A confirmation email was sent to <b>${result.clientEmail}</b>.</p>`
+      ? `<p>An updated confirmation was sent to <b>${result.clientEmail}</b>.</p>`
       : `<p>No client email was on file, so no confirmation was sent.</p>`;
 
     return send(
       200,
-      `<h2 style="color:#16a34a;">✅ Booking confirmed</h2>
-       <p style="font-size:18px;">${result.summary || "Booking"}</p>
+      `<h2 style="color:#16a34a;">✅ Date moved</h2>
+       <p style="font-size:18px;">Now on <b>${result.date}</b>${result.time ? ` · ${result.time}` : ""}</p>
        ${invite}
        <p style="color:#888;margin-top:24px;">You can close this tab.</p>`
     );
   } catch (error) {
-    console.error("Confirm error:", error);
+    console.error("Reschedule approve error:", error);
     return send(
       500,
       `<h2>Something went wrong</h2>
-       <p>The booking couldn't be confirmed automatically. Open it in Google Calendar and confirm it manually, or try the link again.</p>`
+       <p>The date couldn't be moved automatically. Open the event in Google Calendar and move it manually.</p>`
     );
   }
 }

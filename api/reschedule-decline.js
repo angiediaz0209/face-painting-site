@@ -1,15 +1,9 @@
 import crypto from "crypto";
-import { confirmBooking } from "./book.js";
+import { clearReschedule } from "./book.js";
 import { setBookingStatus } from "./sheets.js";
-import { sendEmail, clientConfirmationHtml } from "./email.js";
+import { sendEmail, rescheduleKeptHtml } from "./email.js";
 
-// Must match the scheme in api/notify.js so the emailed link verifies.
 const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
-const BASE_URL = process.env.APP_BASE_URL || "https://face-painting-site.vercel.app";
-
-function statusUrl(eventId) {
-  return `${BASE_URL}/api/status?eventId=${encodeURIComponent(eventId)}&token=${expectedToken(eventId)}`;
-}
 
 function expectedToken(eventId) {
   return crypto
@@ -38,22 +32,20 @@ export default async function handler(req, res) {
   };
 
   if (!eventId || !token) {
-    return send(400, "<h2>Incomplete link</h2><p>This approval link is missing information.</p>");
+    return send(400, "<h2>Incomplete link</h2><p>This link is missing information.</p>");
   }
 
-  // Constant-time compare to avoid token guessing.
   const expected = expectedToken(eventId);
   const ok =
     token.length === expected.length &&
     crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected));
   if (!ok) {
-    return send(403, "<h2>Invalid link</h2><p>This approval link isn't valid.</p>");
+    return send(403, "<h2>Invalid link</h2><p>This link isn't valid.</p>");
   }
 
   try {
-    const result = await confirmBooking(eventId);
+    const result = await clearReschedule(eventId);
 
-    // Await both side effects so they finish before the function is frozen.
     await Promise.allSettled([
       setBookingStatus(eventId, "CONFIRMED").catch((e) =>
         console.error("Sheet status update failed:", e)
@@ -61,36 +53,30 @@ export default async function handler(req, res) {
       result.clientEmail
         ? sendEmail({
             to: result.clientEmail,
-            subject: "You're all booked with Face Painting California! 🎨",
-            html: clientConfirmationHtml({
+            subject: "About your Face Painting California reschedule request",
+            html: rescheduleKeptHtml({
               client: result.clientName,
               date: result.date,
-              time: result.time,
-              location: result.location,
-              quote: result.quote,
-              statusUrl: statusUrl(eventId),
+              proposedDate: result.proposedDate,
             }),
-          }).catch((e) => console.error("Client confirmation email failed:", e))
+          }).catch((e) => console.error("Client note email failed:", e))
         : Promise.resolve(),
     ]);
 
-    const invite = result.clientEmail
-      ? `<p>A confirmation email was sent to <b>${result.clientEmail}</b>.</p>`
-      : `<p>No client email was on file, so no confirmation was sent.</p>`;
-
     return send(
       200,
-      `<h2 style="color:#16a34a;">✅ Booking confirmed</h2>
-       <p style="font-size:18px;">${result.summary || "Booking"}</p>
-       ${invite}
+      `<h2>Kept current date</h2>
+       <p>The reschedule request was cleared. The booking stays on <b>${result.date}</b>${
+        result.clientEmail ? `, and ${result.clientName || "the client"} was let know` : ""
+      }.</p>
        <p style="color:#888;margin-top:24px;">You can close this tab.</p>`
     );
   } catch (error) {
-    console.error("Confirm error:", error);
+    console.error("Reschedule decline error:", error);
     return send(
       500,
       `<h2>Something went wrong</h2>
-       <p>The booking couldn't be confirmed automatically. Open it in Google Calendar and confirm it manually, or try the link again.</p>`
+       <p>The request couldn't be cleared automatically. Open the event in Google Calendar to adjust it manually.</p>`
     );
   }
 }

@@ -219,6 +219,7 @@ export function clientConfirmationHtml(b) {
       </td></tr>
     </table>
   </td></tr>
+  ${b.statusUrl ? `<tr><td style="padding:6px 30px 8px;text-align:center;"><a href="${b.statusUrl}" style="font-size:13px;color:${MUTED};text-decoration:underline;">View your booking status anytime</a></td></tr>` : ""}
   <tr><td style="height:8px;"></td></tr>`;
   return shell({ preheader: "Your face painting party is confirmed!", inner });
 }
@@ -242,6 +243,126 @@ export function clientDeclineHtml(b) {
   </td></tr>
   <tr><td style="padding:18px 30px 8px;text-align:center;font-size:13px;color:${MUTED};">Thank you again for considering Face Painting CA — we hope to paint for your family soon!</td></tr>`;
   return shell({ preheader: "About your booking request", inner });
+}
+
+// ── 4. Client: live booking status page (served in the browser) ──────────────
+const STATUS_STYLES = {
+  CONFIRMED: { bg: GREEN, icon: "✓", title: "Booking Confirmed", note: "You're all set — we can't wait to paint! 🎨" },
+  PENDING: { bg: CORAL, icon: "⏳", title: "Booking Pending", note: "We're confirming artist availability and will be in touch shortly." },
+  CANCELLED: { bg: NAVY, icon: "✕", title: "Booking Cancelled", note: "This booking is no longer on our calendar." },
+  "RESCHEDULE REQUESTED": { bg: CORAL, icon: "🔄", title: "Reschedule Requested", note: "We got your request and will text you to confirm a new date." },
+};
+
+// `b` is a normalized booking (see parseEventToBooking). Pass `eventId` + `token`
+// (the same HMAC that gated the page) to enable the discreet self-serve
+// reschedule request form.
+export function clientStatusHtml(b, { eventId, token } = {}) {
+  const status = (b.status || "PENDING").toUpperCase();
+  const s = STATUS_STYLES[status] || STATUS_STYLES.PENDING;
+  const active = status !== "CANCELLED";
+  const requested = status === "RESCHEDULE REQUESTED";
+  const canRequest = (status === "CONFIRMED" || status === "PENDING") && eventId && token;
+
+  const rows = [
+    detailRow("Event Date", esc(fmtDate(b.date))),
+    b.time ? detailRow("Time", esc(fmtTimeRange(b.time))) : "",
+    b.location ? detailRow("Location", esc(b.location)) : "",
+    b.eventType ? detailRow("Event", esc(b.eventType)) : "",
+    requested && b.proposedDate
+      ? detailRow("Requested new date", esc(fmtDate(b.proposedDate)) + (b.proposedTime ? ` · ${esc(to12h(b.proposedTime))}` : ""), { valueColor: CORAL })
+      : "",
+    b.quote ? detailRow("Quote", esc(b.quote), { valueColor: CORAL, last: true }) : "",
+  ].filter(Boolean);
+
+  // Discreet by design: a small muted disclosure, not a button. Only offered on a
+  // live booking that hasn't already got a request in flight.
+  const rescheduleBlock = canRequest
+    ? `
+  <tr><td style="padding:24px 30px 30px;border-top:1px solid ${LINE};">
+    <details style="text-align:center;">
+      <summary style="font-size:13px;color:${MUTED};text-decoration:underline;cursor:pointer;">Need to change your date?</summary>
+      <div style="max-width:360px;margin:14px auto 0;text-align:left;">
+        <p style="font-size:12px;color:${MUTED};line-height:1.6;text-align:center;margin:0 0 14px;">We hold your artist and turn away other bookings for your date, so please reschedule only if you need to.</p>
+        <form method="POST" action="/api/reschedule-request">
+          <input type="hidden" name="eventId" value="${esc(eventId)}">
+          <input type="hidden" name="token" value="${esc(token)}">
+          <label style="display:block;font-size:13px;color:${BODY};margin-bottom:10px;">New date<br>
+            <input type="date" name="date" required style="width:100%;padding:10px;border:1px solid ${LINE};border-radius:10px;font-size:15px;box-sizing:border-box;margin-top:4px;"></label>
+          <label style="display:block;font-size:13px;color:${BODY};margin-bottom:14px;">Preferred start time <span style="color:${MUTED};">(optional)</span><br>
+            <input type="time" name="time" style="width:100%;padding:10px;border:1px solid ${LINE};border-radius:10px;font-size:15px;box-sizing:border-box;margin-top:4px;"></label>
+          <button type="submit" style="width:100%;background:${CORAL};color:#fff;border:none;padding:13px;border-radius:24px;font-weight:700;font-size:15px;cursor:pointer;">Request new date</button>
+        </form>
+      </div>
+    </details>
+  </td></tr>`
+    : requested
+    ? `
+  <tr><td style="padding:22px 30px 30px;text-align:center;border-top:1px solid ${LINE};">
+    <div style="font-size:13px;color:${BODY};line-height:1.6;max-width:360px;margin:0 auto;">We've got your request and will text you shortly to confirm the new date. Need to reach us sooner?</div>
+    <a href="sms:${SMS_NUMBER}" style="display:inline-block;margin-top:10px;font-size:13px;color:${MUTED};text-decoration:underline;">Text us at ${BUSINESS_PHONE}</a>
+  </td></tr>`
+    : "";
+
+  const inner = `
+  ${heroBanner({ bg: s.bg, icon: s.icon, title: s.title, subtitle: s.note })}
+  <tr><td style="padding:28px 30px 4px;">
+    <div style="font-size:17px;font-weight:800;color:${INK};">Hi ${esc((b.client || "there").split(" ")[0])},</div>
+    <p style="font-size:15px;color:${BODY};line-height:1.6;margin:14px 0 0;">Here's the latest on your face painting booking:</p>
+  </td></tr>
+  <tr><td style="padding:18px 30px 4px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${CREAM};border-radius:14px;overflow:hidden;">${rows.join("")}</table>
+  </td></tr>
+  ${active && !requested && b.date && b.time ? `<tr><td style="padding:22px 30px 6px;text-align:center;">${ctaButton(addToCalendarUrl(b), "Add to Calendar")}</td></tr>` : ""}
+  ${rescheduleBlock}`;
+  return shell({ preheader: `Your booking status: ${s.title}`, inner });
+}
+
+// ── 5. Owner: client requested a reschedule ──────────────────────────────────
+export function rescheduleRequestHtml(b, { approveUrl, declineUrl, calendarUrl }) {
+  const rows = [
+    detailRow("Client", esc(b.clientName)),
+    b.clientEmail ? detailRow("Email", `<a href="mailto:${esc(b.clientEmail)}" style="color:#2f6fd6;text-decoration:none;">${esc(b.clientEmail)}</a>`) : "",
+    b.clientPhone ? detailRow("Phone", esc(b.clientPhone)) : "",
+    detailRow("Current date", esc(fmtDate(b.originalDate)) + (b.originalTime ? ` · ${esc(fmtTimeRange(b.originalTime))}` : "")),
+    detailRow("Requested date", esc(fmtDate(b.newDate)) + (b.newTime ? ` · ${esc(to12h(b.newTime))}` : ""), { valueColor: CORAL, last: true }),
+  ].filter(Boolean);
+  const textClient = b.clientPhone ? `sms:${String(b.clientPhone).replace(/[^\d]/g, "")}` : `sms:${SMS_NUMBER}`;
+  const inner = `
+  <tr><td style="padding:28px 24px 8px;">
+    <div style="font-size:20px;font-weight:800;color:${INK};">🔄 Reschedule Requested</div>
+  </td></tr>
+  <tr><td style="padding:12px 24px 4px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${CREAM};border-radius:14px;overflow:hidden;">${rows.join("")}</table>
+  </td></tr>
+  <tr><td style="padding:16px 24px 6px;">
+    <a href="${textClient}" style="display:inline-block;background:#fff;border:1px solid #dfe4e6;color:${INK};padding:11px 20px;border-radius:24px;text-decoration:none;font-weight:700;font-size:14px;">💬 Text ${esc(b.clientName || "the client")} first</a>
+  </td></tr>
+  <tr><td style="padding:14px 24px 6px;">
+    <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+      <td style="padding-right:10px;">${ctaButton(approveUrl, "Approve New Date", { bg: GREEN })}</td>
+      <td>${ctaButton(declineUrl, "Keep Current Date", { bg: "#f1f1f1", color: CORAL_RED })}</td>
+    </tr></table>
+  </td></tr>
+  <tr><td style="padding:14px 24px 4px;font-size:13px;color:${BODY};line-height:1.5;">
+    <b>Approve New Date</b> moves the event to the requested date and emails the client their updated confirmation. <b>Keep Current Date</b> clears the request and lets the client know the original date stands.
+  </td></tr>
+  ${calendarUrl ? `<tr><td style="padding:10px 24px 4px;"><a href="${calendarUrl}" style="color:#2f6fd6;font-weight:700;text-decoration:none;">Open in Google Calendar</a></td></tr>` : ""}
+  <tr><td style="padding:16px 24px 26px;font-size:12px;color:${MUTED};">Sky, your Face Painting California assistant</td></tr>`;
+  return shell({ preheader: `${b.clientName} wants to move their ${fmtDate(b.originalDate)} booking`, inner });
+}
+
+// ── 6. Client: reschedule not accommodated, original date kept ────────────────
+export function rescheduleKeptHtml(b) {
+  const inner = `
+  ${heroBanner({ bg: CORAL, icon: "📅", title: "Your Date Is Still Set", subtitle: "A quick note about your reschedule request" })}
+  <tr><td style="padding:28px 30px 4px;">
+    <div style="font-size:17px;font-weight:800;color:${INK};">Hi ${esc((b.client || "there").split(" ")[0])},</div>
+    <p style="font-size:15px;color:${BODY};line-height:1.6;margin:14px 0 0;">Thanks for letting us know you'd hoped to move your party${b.proposedDate ? ` to <b>${esc(fmtDate(b.proposedDate))}</b>` : ""}. Unfortunately we're not able to make that new date work, so your booking stays on <b>${esc(fmtDate(b.date))}</b> as originally planned.</p>
+    <p style="font-size:15px;color:${BODY};line-height:1.6;margin:14px 0 0;">If that no longer works for you, just text us and we'll find another option together.</p>
+  </td></tr>
+  <tr><td style="padding:22px 30px 8px;text-align:center;">${ctaButton(`sms:${SMS_NUMBER}`, "💬 Text Us")}</td></tr>
+  <tr><td style="height:10px;"></td></tr>`;
+  return shell({ preheader: "About your reschedule request", inner });
 }
 
 // ── Send ────────────────────────────────────────────────────────────────────

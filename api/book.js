@@ -89,13 +89,21 @@ function parseEventToBooking(e) {
   if (!start) return null;
 
   const isPending = /^\[pending\]/i.test(summary) || e.colorId === '6';
+  const priv = e.extendedProperties?.private || {};
+  const hasReschedule = !!priv.rescheduleDate;
   const summaryMatch = summary.match(/face painting - (.+?)\s*\((.+?)\)/i);
   const startTime = toPacificTime(e.start?.dateTime);
   const endTime = toPacificTime(e.end?.dateTime);
 
   return {
     eventId: e.id,
-    status: isPending ? 'PENDING' : 'CONFIRMED',
+    status: hasReschedule
+      ? 'RESCHEDULE REQUESTED'
+      : isPending
+        ? 'PENDING'
+        : 'CONFIRMED',
+    proposedDate: priv.rescheduleDate || '',
+    proposedTime: priv.rescheduleTime || '',
     date: toPacificDate(start),
     time: startTime && endTime ? `${startTime} - ${endTime}` : startTime,
     client: descField(description, 'Client') || summaryMatch?.[1] || '',
@@ -135,6 +143,20 @@ export async function listCalendarBookings() {
   return (result.data.items || [])
     .map(parseEventToBooking)
     .filter(Boolean);
+}
+
+/**
+ * Fetches a single Calendar event and returns it as a normalized booking object
+ * (or null if it isn't a face painting booking / doesn't exist). Used by the
+ * client status page.
+ */
+export async function getBooking(eventId) {
+  const auth = getAuthClient();
+  const calendarId = process.env.GOOGLE_CALENDAR_ID;
+  const calendar = google.calendar({ version: 'v3', auth });
+
+  const { data: event } = await calendar.events.get({ calendarId, eventId });
+  return parseEventToBooking(event);
 }
 
 /**
@@ -220,6 +242,191 @@ export async function declineBooking(eventId) {
 
   await calendar.events.delete({ calendarId, eventId, sendUpdates: 'none' });
   return { eventId, clientName, clientEmail, date };
+}
+
+// "14:00" -> 840 ; 900 -> "15:00". Used to shift a booking to a new day while
+// preserving its duration.
+function toMin(hhmm) {
+  const [h, m] = (hhmm || '0:0').split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+function fromMin(min) {
+  const h = Math.floor(min / 60) % 24;
+  const m = min % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+// Deletes the reschedule-request keys from an extendedProperties.private bag.
+// Sending null tells the Calendar API to remove the property server-side.
+function clearRescheduleKeys(priv) {
+  return {
+    ...priv,
+    rescheduleDate: null,
+    rescheduleTime: null,
+    rescheduleRequestedAt: null,
+  };
+}
+
+/**
+ * Records a client's reschedule REQUEST on the event without moving it: stores
+ * the proposed date/time in private extended properties (so it survives the
+ * sheet sync) and flags the event yellow in the owner's calendar. The event
+ * only actually moves once the owner approves (see applyReschedule).
+ */
+export async function requestReschedule(eventId, { date, time }) {
+  const auth = getAuthClient();
+  const calendarId = process.env.GOOGLE_CALENDAR_ID;
+  const calendar = google.calendar({ version: 'v3', auth });
+
+  const { data: event } = await calendar.events.get({ calendarId, eventId });
+  const priv = event.extendedProperties?.private || {};
+
+  const { data: updated } = await calendar.events.patch({
+    calendarId,
+    eventId,
+    sendUpdates: 'none',
+    resource: {
+      colorId: '5', // banana/yellow = reschedule requested (visible flag)
+      extendedProperties: {
+        private: {
+          ...priv,
+          rescheduleDate: date,
+          rescheduleTime: time || '',
+          rescheduleRequestedAt: new Date().toISOString(),
+        },
+      },
+    },
+  });
+
+  return parseEventToBooking(updated);
+}
+
+/**
+ * Applies a pending reschedule request: moves the event to the proposed date
+ * (preserving its original duration), clears the request, turns it green, and
+ * re-attaches the client. Returns booking fields for the client confirmation
+ * email. Used by the one-click "Approve new date" link in the owner email.
+ */
+export async function applyReschedule(eventId) {
+  const auth = getAuthClient();
+  const calendarId = process.env.GOOGLE_CALENDAR_ID;
+  const calendar = google.calendar({ version: 'v3', auth });
+
+  const { data: event } = await calendar.events.get({ calendarId, eventId });
+  const priv = event.extendedProperties?.private || {};
+  const newDate = priv.rescheduleDate;
+  if (!newDate) return null; // nothing to apply
+
+  const startHHMM = toPacificTime(event.start?.dateTime) || '00:00';
+  const endHHMM = toPacificTime(event.end?.dateTime) || startHHMM;
+  const durMin = Math.max(toMin(endHHMM) - toMin(startHHMM), 60);
+  const time = priv.rescheduleTime || startHHMM;
+  const newEnd = fromMin(toMin(time) + durMin);
+
+  const clientEmail = descField(event.description, 'Email');
+  const clientName = descField(event.description, 'Client');
+  const summary = (event.summary || '').replace(/^\[pending\]\s*/i, '').trim();
+
+  const patch = {
+    summary,
+    colorId: '10', // green = confirmed
+    start: { dateTime: `${newDate}T${time}:00`, timeZone: 'America/Los_Angeles' },
+    end: { dateTime: `${newDate}T${newEnd}:00`, timeZone: 'America/Los_Angeles' },
+    extendedProperties: { private: clearRescheduleKeys(priv) },
+  };
+  if (clientEmail) {
+    patch.attendees = [{ email: clientEmail, displayName: clientName || undefined }];
+  }
+
+  const { data: updated } = await calendar.events.patch({
+    calendarId,
+    eventId,
+    resource: patch,
+    sendUpdates: 'none',
+  });
+  const parsed = parseEventToBooking(updated) || {};
+
+  return {
+    eventId,
+    clientEmail,
+    clientName,
+    date: parsed.date || '',
+    time: parsed.time || '',
+    location: parsed.location || '',
+    quote: parsed.quote || '',
+    eventType: parsed.eventType || '',
+    guests: parsed.guests || '',
+  };
+}
+
+/**
+ * Dismisses a reschedule request without moving the event (owner keeps the
+ * current date). Clears the request flag and restores the event's color.
+ * Returns the (unchanged) booking plus the date the client had proposed.
+ */
+export async function clearReschedule(eventId) {
+  const auth = getAuthClient();
+  const calendarId = process.env.GOOGLE_CALENDAR_ID;
+  const calendar = google.calendar({ version: 'v3', auth });
+
+  const { data: event } = await calendar.events.get({ calendarId, eventId });
+  const priv = event.extendedProperties?.private || {};
+  const wasPending = /^\[pending\]/i.test(event.summary || '');
+
+  const { data: updated } = await calendar.events.patch({
+    calendarId,
+    eventId,
+    sendUpdates: 'none',
+    resource: {
+      colorId: wasPending ? '6' : '10',
+      extendedProperties: { private: clearRescheduleKeys(priv) },
+    },
+  });
+  const parsed = parseEventToBooking(updated) || {};
+
+  return {
+    eventId,
+    clientEmail: descField(event.description, 'Email'),
+    clientName: descField(event.description, 'Client'),
+    date: parsed.date || '',
+    time: parsed.time || '',
+    proposedDate: priv.rescheduleDate || '',
+  };
+}
+
+/**
+ * Moves a booking to a new date/time directly (owner manual reschedule from the
+ * dashboard). Preserves the original duration and PENDING/CONFIRMED state, and
+ * clears any open reschedule request. Returns the updated normalized booking.
+ */
+export async function moveBooking(eventId, { date, time }) {
+  const auth = getAuthClient();
+  const calendarId = process.env.GOOGLE_CALENDAR_ID;
+  const calendar = google.calendar({ version: 'v3', auth });
+
+  const { data: event } = await calendar.events.get({ calendarId, eventId });
+  const priv = event.extendedProperties?.private || {};
+  const wasPending = /^\[pending\]/i.test(event.summary || '') || event.colorId === '6';
+
+  const startHHMM = toPacificTime(event.start?.dateTime) || '00:00';
+  const endHHMM = toPacificTime(event.end?.dateTime) || startHHMM;
+  const durMin = Math.max(toMin(endHHMM) - toMin(startHHMM), 60);
+  const newTime = time || startHHMM;
+  const newEnd = fromMin(toMin(newTime) + durMin);
+
+  const { data: updated } = await calendar.events.patch({
+    calendarId,
+    eventId,
+    sendUpdates: 'none',
+    resource: {
+      colorId: wasPending ? '6' : '10',
+      start: { dateTime: `${date}T${newTime}:00`, timeZone: 'America/Los_Angeles' },
+      end: { dateTime: `${date}T${newEnd}:00`, timeZone: 'America/Los_Angeles' },
+      extendedProperties: { private: clearRescheduleKeys(priv) },
+    },
+  });
+
+  return parseEventToBooking(updated);
 }
 
 /**
