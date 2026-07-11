@@ -63,7 +63,12 @@ const STYLE = `
   :root{color-scheme:light dark}
   *{box-sizing:border-box}
   body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:#faf6ef;color:#2d3540}
-  .wrap{max-width:640px;margin:0 auto;padding:20px 16px 60px}
+  .wrap{max-width:1120px;margin:0 auto;padding:20px 16px 60px}
+  .grid{display:grid;grid-template-columns:1fr;gap:22px}
+  @media(min-width:900px){
+    .grid.has-cal{grid-template-columns:minmax(0,1fr) 400px}
+    .grid.has-cal .col-cal{position:sticky;top:20px;align-self:start}
+  }
   h1{font-size:22px;margin:6px 0 2px}
   .sub{color:#9aa1a9;font-size:14px;margin:0 0 20px}
   .sec{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#9aa1a9;margin:26px 0 10px}
@@ -105,13 +110,10 @@ const STYLE = `
   .bform textarea.bin{resize:vertical;font-family:inherit}
   .btn-neutral{background:#f1f1f1;color:#55606b}
   .addbar{margin:2px 0 18px}
-  details.cal{margin:2px 0 18px}
-  details.cal>summary{font-size:14px;font-weight:700;color:#55606b;cursor:pointer;list-style:none}
-  details.cal>summary::-webkit-details-marker{display:none}
-  details.cal>summary::before{content:"\\25B8  ";color:#9aa1a9}
-  details.cal[open]>summary::before{content:"\\25BE  "}
-  .calframe{position:relative;margin-top:12px;border:1px solid #efe7db;border-radius:14px;overflow:hidden;background:#fff}
-  .calframe iframe{display:block;width:100%;height:600px;border:0}
+  .calhead{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#9aa1a9;margin:0 0 10px}
+  .calframe{position:relative;border:1px solid #efe7db;border-radius:14px;overflow:hidden;background:#fff}
+  .calframe iframe{display:block;width:100%;height:560px;border:0}
+  @media(min-width:900px){ .grid.has-cal .calframe iframe{height:calc(100vh - 96px);min-height:520px} }
   .calnote{font-size:12px;color:#9aa1a9;margin-top:8px;line-height:1.5}
   .empty{color:#9aa1a9;text-align:center;padding:30px 0}
   .login{max-width:340px;margin:80px auto;text-align:center}
@@ -299,17 +301,15 @@ function editForm(b) {
   </details>`;
 }
 
-// Collapsible embedded Google Calendar. Loads via the viewer's own Google
-// session, so it renders when the owner is signed into Google with access to
-// this calendar (we deliberately don't make the calendar public).
-function calendarEmbed() {
+// Embedded Google Calendar panel (right column on desktop, stacked below the
+// list on mobile). Loads via the viewer's own Google session, so it renders when
+// the owner is signed into Google with access (we keep the calendar private).
+function calendarPanel() {
   if (!CALENDAR_ID) return "";
   const src = `https://calendar.google.com/calendar/embed?src=${encodeURIComponent(CALENDAR_ID)}&ctz=America%2FLos_Angeles&mode=MONTH&showTitle=0&showPrint=0&showTabs=1&showCalendars=0`;
-  return `<details class="cal">
-    <summary>📅 Calendar view</summary>
+  return `<div class="calhead">📅 Calendar</div>
     <div class="calframe"><iframe src="${src}" loading="lazy" title="Google Calendar"></iframe></div>
-    <div class="calnote">If this looks empty, open it on a device where you're signed into the Google account that owns this calendar.</div>
-  </details>`;
+    <div class="calnote">If this looks empty, open it on a device where you're signed into the Google account that owns this calendar.</div>`;
 }
 
 function todayPacific() {
@@ -323,14 +323,19 @@ export function dashboardPage(bookings) {
     .filter((b) => b.status !== "RESCHEDULE REQUESTED" && b.status !== "CANCELLED" && b.date >= today)
     .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
 
+  const cal = calendarPanel();
   const body = `<div class="wrap">
     <h1>🎨 Bookings</h1>
     <p class="sub">${upcoming.length} upcoming · ${requests.length} reschedule request${requests.length === 1 ? "" : "s"}</p>
-    <div class="addbar">${addEventForm()}</div>
-    ${calendarEmbed()}
-    ${requests.length ? `<div class="sec">Reschedule Requests</div>${requests.map(bookingCard).join("")}` : ""}
-    <div class="sec">Upcoming Events</div>
-    ${upcoming.length ? upcoming.map(bookingCard).join("") : `<div class="empty">No upcoming bookings.</div>`}
+    <div class="grid${cal ? " has-cal" : ""}">
+      <div class="col-list">
+        <div class="addbar">${addEventForm()}</div>
+        ${requests.length ? `<div class="sec">Reschedule Requests</div>${requests.map(bookingCard).join("")}` : ""}
+        <div class="sec">Upcoming Events</div>
+        ${upcoming.length ? upcoming.map(bookingCard).join("") : `<div class="empty">No upcoming bookings.</div>`}
+      </div>
+      ${cal ? `<div class="col-cal">${cal}</div>` : ""}
+    </div>
   </div>`;
   return shellPage("Bookings · Face Painting CA", body);
 }
