@@ -30,7 +30,8 @@ const BOOKING_TOOL = {
     properties: {
       clientName: {
         type: "string",
-        description: "The client's full name",
+        description:
+          "The client's real full name, as given by the client. Always ask for it — never guess, leave it blank, or use a placeholder like 'there', 'guest', or 'client'.",
       },
       clientEmail: {
         type: "string",
@@ -205,6 +206,23 @@ async function handleToolUse(toolUse) {
   }
 
   if (toolUse.name === "create_booking") {
+    // Hard guard: never create a booking without a real client name (the schema
+    // only guarantees the field is present, not that it's a genuine name). If it's
+    // missing or a placeholder, send Sky back to ask the client before booking.
+    const rawName = (toolUse.input.clientName || "").trim();
+    const placeholder = /^(there|guest|client|customer|friend|unknown|n\/?a|none|test|-+)$/i;
+    if (rawName.length < 2 || !/\p{L}/u.test(rawName) || placeholder.test(rawName)) {
+      return {
+        type: "tool_result",
+        tool_use_id: toolUse.id,
+        content: JSON.stringify({
+          success: false,
+          message:
+            "I can't book this yet — I still need the client's name. Please ask the client what name the party should be booked under, then create the booking with their real name.",
+        }),
+      };
+    }
+
     try {
       // Every booking must be team-approved before it is confirmed, so force
       // pending here regardless of what the model passed. This guarantees no
