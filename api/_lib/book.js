@@ -95,6 +95,14 @@ function parseEventToBooking(e) {
   const startTime = toPacificTime(e.start?.dateTime);
   const endTime = toPacificTime(e.end?.dateTime);
 
+  // For manual/legacy calendar entries with no structured "Client:" field, fall
+  // back to the event title (minus the "[PENDING]" / "Face Painting" prefix) so
+  // the card shows something meaningful instead of a blank name.
+  const titleName = summary
+    .replace(/^\[pending\]\s*/i, '')
+    .replace(/^face\s*painting\s*[-:]?\s*/i, '')
+    .trim();
+
   return {
     eventId: e.id,
     status: hasReschedule
@@ -106,7 +114,7 @@ function parseEventToBooking(e) {
     proposedTime: priv.rescheduleTime || '',
     date: toPacificDate(start),
     time: startTime && endTime ? `${startTime} - ${endTime}` : startTime,
-    client: descField(description, 'Client') || summaryMatch?.[1] || '',
+    client: descField(description, 'Client') || summaryMatch?.[1] || titleName || '',
     phone: descField(description, 'Phone'),
     email: descField(description, 'Email'),
     eventType: descField(description, 'Event Type') || summaryMatch?.[2] || '',
