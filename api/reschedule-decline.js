@@ -1,7 +1,7 @@
 import crypto from "crypto";
-import { clearReschedule } from "./book.js";
-import { setBookingStatus } from "./sheets.js";
-import { sendEmail, rescheduleKeptHtml } from "./email.js";
+import { clearReschedule } from "./_lib/book.js";
+import { setBookingStatus } from "./_lib/sheets.js";
+import { sendEmail, rescheduleKeptHtml } from "./_lib/email.js";
 
 const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
 

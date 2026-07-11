@@ -1,9 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
-import getSkySystemPrompt from "./sky-system-prompt.js";
-import { createBooking, checkAvailability } from "./book.js";
-import { sendBookingNotification } from "./notify.js";
-import { addBookingToSheet } from "./sheets.js";
-import { computeQuote } from "./pricing.js";
+import getSkySystemPrompt from "./_lib/sky-system-prompt.js";
+import { createBooking, checkAvailability } from "./_lib/book.js";
+import { sendBookingNotification } from "./_lib/notify.js";
+import { addBookingToSheet } from "./_lib/sheets.js";
+import { computeQuote } from "./_lib/pricing.js";
 
 const AVAILABILITY_TOOL = {
   name: "check_availability",

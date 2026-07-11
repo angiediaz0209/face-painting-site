@@ -1,5 +1,5 @@
-import { listCalendarBookings } from "./book.js";
-import { syncBookingsToSheet } from "./sheets.js";
+import { listCalendarBookings } from "./_lib/book.js";
+import { syncBookingsToSheet } from "./_lib/sheets.js";
 
 /**
  * Rebuilds the booking sheet from the calendar: upserts every current booking

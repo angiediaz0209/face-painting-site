@@ -1,6 +1,6 @@
 import crypto from "crypto";
-import { listCalendarBookings } from "./book.js";
-import { fmtDate, fmtTimeRange } from "./email.js";
+import { listCalendarBookings } from "./_lib/book.js";
+import { fmtDate, fmtTimeRange } from "./_lib/email.js";
 
 const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
 const OWNER_PASSWORD = process.env.OWNER_DASHBOARD_PASSWORD || "";

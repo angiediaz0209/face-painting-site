@@ -1,7 +1,7 @@
 import crypto from "crypto";
-import { moveBooking } from "./book.js";
-import { syncBookingsToSheet } from "./sheets.js";
-import { sendEmail, clientConfirmationHtml } from "./email.js";
+import { moveBooking } from "./_lib/book.js";
+import { syncBookingsToSheet } from "./_lib/sheets.js";
+import { sendEmail, clientConfirmationHtml } from "./_lib/email.js";
 
 const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
 const OWNER_PASSWORD = process.env.OWNER_DASHBOARD_PASSWORD || "";

@@ -1,7 +1,7 @@
 import crypto from "crypto";
-import { requestReschedule } from "./book.js";
-import { setBookingStatus } from "./sheets.js";
-import { sendRescheduleRequestNotification } from "./notify.js";
+import { requestReschedule } from "./_lib/book.js";
+import { setBookingStatus } from "./_lib/sheets.js";
+import { sendRescheduleRequestNotification } from "./_lib/notify.js";
 
 // Same token scheme as the rest of the booking links.
 const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";

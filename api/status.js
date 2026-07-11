@@ -1,6 +1,6 @@
 import crypto from "crypto";
-import { getBooking } from "./book.js";
-import { clientStatusHtml } from "./email.js";
+import { getBooking } from "./_lib/book.js";
+import { clientStatusHtml } from "./_lib/email.js";
 
 // Same secret + token scheme as api/confirm.js / api/decline.js / api/notify.js
 // so a single HMAC of the eventId gates the client's private status link.

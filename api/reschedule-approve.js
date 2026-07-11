@@ -1,7 +1,7 @@
 import crypto from "crypto";
-import { applyReschedule } from "./book.js";
-import { setBookingStatus } from "./sheets.js";
-import { sendEmail, clientConfirmationHtml } from "./email.js";
+import { applyReschedule } from "./_lib/book.js";
+import { setBookingStatus } from "./_lib/sheets.js";
+import { sendEmail, clientConfirmationHtml } from "./_lib/email.js";
 
 const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
 const BASE_URL = process.env.APP_BASE_URL || "https://face-painting-site.vercel.app";

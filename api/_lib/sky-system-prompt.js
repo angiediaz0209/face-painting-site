@@ -10,7 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // if the file is ever unavailable (and is otherwise ignored).
 function loadSkyInstructions() {
   try {
-    return fs.readFileSync(path.join(__dirname, '..', 'SKY_INSTRUCTIONS.md'), 'utf-8');
+    return fs.readFileSync(path.join(__dirname, '..', '..', 'SKY_INSTRUCTIONS.md'), 'utf-8');
   } catch {
     if (process.env.SKY_INSTRUCTIONS && process.env.SKY_INSTRUCTIONS.trim()) {
       return process.env.SKY_INSTRUCTIONS;

@@ -1,7 +1,7 @@
 import crypto from "crypto";
-import { confirmBooking } from "./book.js";
-import { setBookingStatus } from "./sheets.js";
-import { sendEmail, clientConfirmationHtml } from "./email.js";
+import { confirmBooking } from "./_lib/book.js";
+import { setBookingStatus } from "./_lib/sheets.js";
+import { sendEmail, clientConfirmationHtml } from "./_lib/email.js";
 
 // Must match the scheme in api/notify.js so the emailed link verifies.
 const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
