@@ -82,7 +82,7 @@ const STYLE = `
   .a-cal{padding:8px 2px}
   .a-list{padding:8px 6px 0}
 
-  h1{font-family:${SERIF};font-size:30px;font-weight:700;letter-spacing:-.4px;margin:2px 0 4px}
+  h1{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:30px;font-weight:800;letter-spacing:-.5px;margin:2px 0 4px}
   .sub{color:#a29a8b;font-size:14px;margin:0}
   .sec{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#b0a692;margin:26px 0 12px}
 
@@ -92,7 +92,10 @@ const STYLE = `
   .btn-cancel{background:#efe6d6;color:#a94e2a}
   .btn-resched{background:#f1d8c6;color:#a94e2a}
   .btn-confirm{background:#5f8c6b;color:#fff}
-  @media(max-width:899px){ .btn-add{display:block;width:100%;text-align:center} }
+
+  /* Header: title on the left, Add event button pinned top-right */
+  .a-head-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+  .a-head-row .btn-add{flex-shrink:0;white-space:nowrap;margin-top:4px}
 
   /* Cards */
   .card{position:relative;background:#fff;border:1px solid #efe6d6;border-radius:16px;padding:20px 20px 16px;margin-bottom:14px;
@@ -125,6 +128,15 @@ const STYLE = `
   .gcal{display:inline-block;margin-top:6px;font-size:14px;font-weight:700;color:#b0542e;text-decoration:none}
   .empty{color:#a29a8b;text-align:center;padding:30px 0}
 
+  /* Details drawer (read-only extra info) */
+  .details{border-top:1px solid #f0e8d9;padding-top:13px}
+  .drow{display:flex;gap:12px;font-size:14.5px;margin-bottom:8px}
+  .dk{flex:0 0 62px;color:#b0a692;font-weight:700}
+  .dv{color:#4a4740;white-space:pre-wrap;word-break:break-word;min-width:0}
+  .dv a{color:#b0542e;text-decoration:none}
+  .dv a:hover{text-decoration:underline}
+  .dempty{color:#a29a8b;font-size:14px}
+
   /* Calendar */
   .calbox{background:#fff;border:1px solid #efe6d6;border-radius:16px;padding:16px 14px}
   @media(min-width:900px){ .calbox{background:transparent;border:none;border-radius:0;padding:0} }
@@ -144,7 +156,8 @@ const STYLE = `
   .cd.today .cn{background:#b0542e;color:#fff}
   .cd.hl .cn{background:#f1d8c6;color:#a94e2a}
   .cd.today.hl .cn{background:#b0542e;color:#fff}
-  .dot{width:5px;height:5px;border-radius:50%;background:#b0542e;margin-top:3px}
+  .dots{display:flex;justify-content:center;gap:3px;margin-top:3px}
+  .dot{width:5px;height:5px;border-radius:50%;background:#b0542e}
   .cd.today .dot{background:#b0542e}
   .callink{display:inline-block;margin-top:16px;font-size:13px;color:#b0542e;text-decoration:none}
 
@@ -167,7 +180,7 @@ function loginPage(error) {
   return shellPage(
     "Owner · Face Painting CA",
     `<div class="login">
-      <h1>🎨 Bookings</h1>
+      <h1>Bookings</h1>
       <p class="sub">Enter the owner password to continue.</p>
       <form method="POST" action="/api/owner">
         <input type="password" name="password" placeholder="Password" autofocus required>
@@ -242,6 +255,31 @@ function rescheduleFormInner(b) {
     </form>`;
 }
 
+// Read-only "extra info" drawer: the booking fields not shown on the card face
+// (phone, email, event type, guests, quote, notes) plus a Google Calendar link.
+function detailsInner(b) {
+  const rows = [
+    ["Phone", b.phone, (v) => `<a href="tel:${esc(String(v).replace(/[^\d+]/g, ""))}">${esc(v)}</a>`],
+    ["Email", b.email, (v) => `<a href="mailto:${esc(v)}">${esc(v)}</a>`],
+    ["Event", b.eventType],
+    ["Guests", b.guests],
+    ["Quote", b.quote],
+    ["Notes", b.notes],
+  ].filter(([, v]) => v && String(v).trim());
+
+  const gcal = b.htmlLink
+    ? `<a class="gcal" href="${esc(b.htmlLink)}" target="_blank" rel="noopener">📅 Open in Google Calendar</a>`
+    : "";
+
+  if (!rows.length) {
+    return `<div class="details"><div class="dempty">No extra details on file.</div>${gcal}</div>`;
+  }
+  const list = rows
+    .map(([k, v, fmt]) => `<div class="drow"><span class="dk">${k}</span><span class="dv">${fmt ? fmt(v) : esc(v)}</span></div>`)
+    .join("");
+  return `<div class="details">${list}${gcal}</div>`;
+}
+
 function editFormInner(b) {
   const gcal = b.htmlLink
     ? `<a class="gcal" href="${esc(b.htmlLink)}" target="_blank" rel="noopener">📅 Open in Google Calendar</a>`
@@ -255,9 +293,12 @@ function editFormInner(b) {
     </form>`;
 }
 
-function addEventForm() {
-  return `<button class="btn btn-add" data-toggle="addform">＋ Add event</button>
-    <div id="addform" class="drawer" hidden>
+function addEventButton() {
+  return `<button class="btn btn-add" data-toggle="addform">＋ Add event</button>`;
+}
+
+function addEventDrawer() {
+  return `<div id="addform" class="drawer" hidden>
       <form method="POST" action="/api/owner" class="bform">
         <input type="hidden" name="action" value="create">
         ${bookingFields()}
@@ -298,8 +339,10 @@ function bookingCard(b) {
     <div class="cactions">
       ${btns}
       <span class="spacer"></span>
+      <a class="editlink" href="#" data-toggle="df-${eid}">Details</a>
       <a class="editlink" href="#" data-toggle="ef-${eid}">Edit</a>
     </div>
+    <div id="df-${eid}" class="drawer" hidden>${detailsInner(b)}</div>
     <div id="rf-${eid}" class="drawer" hidden>${rescheduleFormInner(b)}</div>
     <div id="ef-${eid}" class="drawer" hidden>${editFormInner(b)}</div>
   </div>`;
@@ -344,7 +387,11 @@ function monthCells(bookings, ym) {
     const num = has
       ? `<a class="cn" href="#b-${esc(items[0].eventId)}">${d}</a>`
       : `<span class="cn">${d}</span>`;
-    cells += `<div class="${cls}"${attr}>${num}${has ? `<span class="dot"></span>` : ""}</div>`;
+    // One dot per booking that day (capped at 4 so a busy day doesn't overflow).
+    const dots = has
+      ? `<span class="dots">${"<span class=\"dot\"></span>".repeat(Math.min(items.length, 4))}</span>`
+      : "";
+    cells += `<div class="${cls}"${attr}>${num}${dots}</div>`;
   }
   const trailing = (7 - ((firstDow + daysInMonth) % 7)) % 7;
   for (let d = 1; d <= trailing; d++) {
@@ -434,10 +481,15 @@ export function dashboardPage(bookings, ym) {
 
   const body = `<div class="app">
     <div class="a-head">
-      <h1>🎨 Bookings</h1>
-      <p class="sub">${upcoming.length} upcoming · ${requests.length} reschedule request${requests.length === 1 ? "" : "s"}</p>
+      <div class="a-head-row">
+        <div>
+          <h1>Bookings</h1>
+          <p class="sub">${upcoming.length} upcoming · ${requests.length} reschedule request${requests.length === 1 ? "" : "s"}</p>
+        </div>
+        ${addEventButton()}
+      </div>
     </div>
-    <div class="a-add">${addEventForm()}</div>
+    <div class="a-add">${addEventDrawer()}</div>
     <div class="a-cal">${calendarPanel(bookings, month)}</div>
     <div class="a-list">${requestsHtml}${list}</div>
   </div>`;
