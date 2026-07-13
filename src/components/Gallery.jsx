@@ -66,11 +66,9 @@ export default function Gallery() {
               <img
                 src={img.src}
                 alt={img.alt}
-                className="w-full h-56 sm:h-64 object-cover"
+                loading="lazy"
+                className="w-full aspect-[4/3] object-cover"
               />
-              <span className="absolute left-1/2 bottom-5 -translate-x-1/2 whitespace-nowrap bg-white text-navy font-mono text-xs sm:text-sm px-3 py-1.5 rounded-md shadow-md">
-                {img.label}
-              </span>
             </button>
           ))}
         </div>

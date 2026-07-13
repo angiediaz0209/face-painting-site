@@ -153,8 +153,8 @@ export default function App() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
               {services.map((svc, i) => (
                 <div key={i} className="card-lift bg-cream rounded-2xl overflow-hidden border border-gray-light">
-                  <div className="h-48 overflow-hidden">
-                    <img src={svc.image} alt={svc.title} className="w-full h-full object-cover" />
+                  <div className="aspect-[3/2] overflow-hidden">
+                    <img src={svc.image} alt={svc.title} loading="lazy" className="w-full h-full object-cover" />
                   </div>
                   <div className="p-5 sm:p-6">
                     <h3 className="text-lg font-display text-navy mb-1.5">{svc.title}</h3>

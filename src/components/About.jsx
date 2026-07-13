@@ -18,7 +18,8 @@ export default function About() {
               <img
                 src={aboutImg}
                 alt="Face Painting California artist"
-                className="w-full h-80 md:h-[26rem] object-cover"
+                loading="lazy"
+                className="w-full aspect-[4/5] object-cover"
               />
             </div>
           </div>
