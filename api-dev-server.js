@@ -12,6 +12,7 @@ import rescheduleApproveHandler from './api/reschedule-approve.js';
 import rescheduleDeclineHandler from './api/reschedule-decline.js';
 import ownerHandler from './api/owner.js';
 import rescheduleManualHandler from './api/reschedule-manual.js';
+import reviewHandler from './api/review.js';
 
 // Load .env.local into process.env
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -96,6 +97,9 @@ const server = http.createServer((req, res) => {
   } else if (req.url.startsWith('/api/owner')) {
     // Password-gated owner dashboard (GET list / POST login).
     ownerHandler(req, res);
+  } else if (req.url.startsWith('/api/review')) {
+    // Public review form (GET), approved-list JSON (GET ?list=1), submit (POST).
+    reviewHandler(req, res);
   } else {
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Not found' }));

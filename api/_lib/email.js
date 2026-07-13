@@ -245,6 +245,32 @@ export function clientDeclineHtml(b) {
   return shell({ preheader: "About your booking request", inner });
 }
 
+// ── 3b. Client: birthday follow-up / returning-family discount ───────────────
+export function birthdayPromoHtml(b, { discount = "10% off", unsubscribeUrl = "" } = {}) {
+  const first = esc((b.name || b.client || "there").split(" ")[0]);
+  const occasion = /birth/i.test(b.lastEventType || "") ? "birthday party" : "celebration";
+  const inner = `
+  ${heroBanner({ bg: CORAL, icon: "🎂", title: "A Birthday Treat For You", subtitle: "Because we loved painting for your family" })}
+  <tr><td style="padding:28px 30px 4px;">
+    <div style="font-size:17px;font-weight:800;color:${INK};">Hi ${first},</div>
+    <p style="font-size:15px;color:${BODY};line-height:1.6;margin:14px 0 0;">We had the best time at your ${occasion} last time, and it sounds like another birthday might be right around the corner! We'd love to come back and paint again.</p>
+  </td></tr>
+  <tr><td style="padding:18px 30px 6px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${CREAM};border-radius:14px;">
+      <tr><td style="padding:22px 20px;text-align:center;">
+        <div style="font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${MUTED};">Returning family offer</div>
+        <div style="font-size:30px;font-weight:800;color:${CORAL_RED};margin:8px 0;">${esc(discount)}</div>
+        <div style="font-size:14px;color:${BODY};">on your next booking</div>
+      </td></tr>
+    </table>
+  </td></tr>
+  <tr><td style="padding:22px 30px 6px;text-align:center;">${ctaButton(`sms:${SMS_NUMBER}`, "💬 Text Us to Book")}</td></tr>
+  <tr><td style="padding:8px 30px 8px;text-align:center;font-size:13px;color:${MUTED};">Or reach us anytime at ${BUSINESS_PHONE}</td></tr>
+  ${unsubscribeUrl ? `<tr><td style="padding:6px 30px 10px;text-align:center;"><a href="${unsubscribeUrl}" style="font-size:12px;color:${MUTED};text-decoration:underline;">No thanks, don't send me offers</a></td></tr>` : ""}
+  <tr><td style="height:8px;"></td></tr>`;
+  return shell({ preheader: "A little birthday treat from Face Painting California", inner });
+}
+
 // ── 4. Client: live booking status page (served in the browser) ──────────────
 const STATUS_STYLES = {
   CONFIRMED: { bg: GREEN, icon: "✓", title: "Booking Confirmed", note: "You're all set — we can't wait to paint! 🎨" },

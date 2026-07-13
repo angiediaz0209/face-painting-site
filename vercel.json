@@ -11,6 +11,9 @@
       "maxDuration": 60
     }
   },
+  "rewrites": [
+    { "source": "/review", "destination": "/api/review" }
+  ],
   "crons": [
     {
       "path": "/api/sync",

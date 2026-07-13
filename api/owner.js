@@ -1,7 +1,19 @@
 import crypto from "crypto";
 import { listCalendarBookings, createOwnerBooking, updateBooking } from "./_lib/book.js";
-import { syncBookingsToSheet } from "./_lib/sheets.js";
-import { fmtTimeRange } from "./_lib/email.js";
+import { syncBookingsToSheet, getBookingsFromSheet, getReviews, setReviewStatus } from "./_lib/sheets.js";
+import { fmtTimeRange, birthdayPromoHtml, sendEmail } from "./_lib/email.js";
+import {
+  getClients,
+  upsertClient,
+  setClientFlag,
+  listBirthdayFollowups,
+  normalizeKey,
+  smsHref,
+  firstName,
+  BIRTHDAY_DISCOUNT,
+} from "./_lib/clients.js";
+import { optoutToken } from "./status.js";
+import { reviewToken } from "./review.js";
 
 const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
 const OWNER_PASSWORD = process.env.OWNER_DASHBOARD_PASSWORD || "";
@@ -160,6 +172,27 @@ const STYLE = `
   .dot{width:5px;height:5px;border-radius:50%;background:#b0542e}
   .cd.today .dot{background:#b0542e}
   .callink{display:inline-block;margin-top:16px;font-size:13px;color:#b0542e;text-decoration:none}
+
+  /* Top nav (CRM views) */
+  .nav{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}
+  .nav a{font-size:14px;font-weight:700;color:#8a8378;text-decoration:none;padding:7px 14px;border-radius:18px;background:#efe6d6}
+  .nav a.on{background:#b0542e;color:#fff}
+
+  /* CRM page wrap + follow-up / client extras */
+  .page{max-width:660px;margin:0 auto;padding:14px 12px 48px}
+  @media(min-width:900px){ .page{max-width:820px;margin:26px auto;padding:0 8px} }
+  .headrow{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:6px}
+  .fmeta{color:#7c8676;font-size:14.5px;margin-top:7px}
+  .fsub{color:#b3ab9c;font-size:14px;margin-top:4px}
+  .crmeta{color:#8a8378;font-size:13.5px;margin-top:4px}
+  .copybox{margin-top:12px}
+  .copybox textarea{width:100%;border:1px solid #e7ddcc;border-radius:11px;padding:11px 12px;font-size:14px;font-family:inherit;background:#fdfbf6;resize:vertical;color:#4a4740;line-height:1.5}
+  .days{font-size:12px;font-weight:700;padding:5px 12px;border-radius:16px;background:#f6e6d2;color:#a9752f;white-space:nowrap;flex-shrink:0}
+  .btn-text{background:#5f8c6b;color:#fff}
+  .btn-copy{background:#efe6d6;color:#7c5a2a}
+  .btn-plain{background:none;border:none;cursor:pointer;color:#a29a8b;font-size:13px;font-weight:600;font-family:inherit;padding:6px 4px}
+  .btn-plain:hover{color:#8a8378}
+  .hint{color:#b3ab9c;font-size:13px;margin:2px 2px 8px}
 
   /* Login */
   .login{max-width:360px;margin:70px auto;text-align:center;background:#f6f0e4;border-radius:20px;padding:34px 28px}
@@ -436,6 +469,12 @@ function todayPacific() {
 const DASHBOARD_SCRIPT = `<script>
 (function(){
   document.addEventListener('click',function(e){
+    var cp=e.target.closest('[data-copy]');
+    if(cp){ e.preventDefault();
+      var src=document.getElementById(cp.getAttribute('data-copy'));
+      if(src&&navigator.clipboard){ navigator.clipboard.writeText(src.value||src.textContent||'');
+        var o=cp.textContent; cp.textContent='Copied!'; setTimeout(function(){cp.textContent=o;},1500); }
+      return; }
     var t=e.target.closest('[data-toggle]'); if(!t) return;
     e.preventDefault();
     var el=document.getElementById(t.getAttribute('data-toggle')); if(el) el.hidden=!el.hidden;
@@ -453,6 +492,310 @@ const DASHBOARD_SCRIPT = `<script>
   });
 })();
 </script>`;
+
+// ── CRM views (Follow-ups / Clients / Leads) ─────────────────────────────────
+function navBar(active) {
+  const items = [
+    ["bookings", "Bookings"],
+    ["past", "Past"],
+    ["followups", "Follow-ups"],
+    ["clients", "Clients"],
+    ["leads", "Leads"],
+    ["reviews", "Reviews"],
+  ];
+  return `<div class="nav">${items
+    .map(
+      ([k, label]) =>
+        `<a class="${k === active ? "on" : ""}" href="/api/owner${k === "bookings" ? "" : `?view=${k}`}">${label}</a>`
+    )
+    .join("")}</div>`;
+}
+
+// A hidden POST form reduced to a single button (used for the one-off card actions).
+function actionForm(action, key, view, label, cls) {
+  return `<form method="POST" action="/api/owner" style="display:inline">
+      <input type="hidden" name="action" value="${esc(action)}">
+      <input type="hidden" name="key" value="${esc(key)}">
+      <input type="hidden" name="view" value="${esc(view)}">
+      <button class="${cls}" type="submit">${label}</button>
+    </form>`;
+}
+
+// A client's one-time review link + buttons to send it (SMS) or copy it.
+// `base` is the site origin; returns "" when there's no base or key to build from.
+function askReviewControls(base, { key, name, phone }) {
+  if (!base || !key) return "";
+  const link = `${base}/api/review?rk=${encodeURIComponent(key)}&token=${reviewToken(key)}&name=${encodeURIComponent(firstName(name) || "")}`;
+  const first = firstName(name) || "there";
+  const msg = `Hi ${first}! Thanks for choosing Face Painting California. We'd love a quick review: ${link}`;
+  const cid = `rl-${String(key).replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const sms = phone ? `<a class="btn btn-copy" href="${esc(smsHref(phone, msg))}">📣 Ask for review</a>` : "";
+  return `${sms}
+    <button class="btn btn-copy" data-copy="${cid}">Copy review link</button>
+    <input id="${cid}" type="text" readonly value="${esc(link)}" style="position:absolute;left:-9999px" aria-hidden="true">`;
+}
+
+function followupCard(f) {
+  const key = esc(f.key);
+  const taid = `sug-${key}`;
+  const last = [shortDate(f.lastEventDate), f.lastEventType, f.lastLocation]
+    .filter(Boolean)
+    .map(esc)
+    .join(" · ");
+  const first = esc(firstName(f.name));
+  return `<div class="card">
+    <div class="crow">
+      <div class="cname">${esc(f.name || "—")}</div>
+      <span class="days">🎂 in ${f.daysUntil} day${f.daysUntil === 1 ? "" : "s"}</span>
+    </div>
+    <div class="fmeta">Birthday around ${esc(shortDate(f.nextBirthday))}</div>
+    ${last ? `<div class="fsub">Last: ${last}</div>` : ""}
+    <div class="copybox"><textarea id="${taid}" rows="4" readonly>${esc(f.suggestedText)}</textarea></div>
+    <div class="cactions">
+      ${f.phone ? `<a class="btn btn-text" href="${esc(f.smsHref)}">💬 Text ${first}</a>` : ""}
+      <button class="btn btn-copy" data-copy="${taid}">Copy text</button>
+      ${f.email ? actionForm("promo", f.key, "followups", "✉️ Send email discount", "btn btn-add") : ""}
+      <span class="spacer"></span>
+      ${actionForm("optout-owner", f.key, "followups", "Not interested", "btn-plain")}
+    </div>
+  </div>`;
+}
+
+export function followupsPage(followups) {
+  const list = followups.length
+    ? followups.map(followupCard).join("")
+    : `<div class="empty">No birthdays coming up in the next few weeks.</div>`;
+  const body = `<div class="page">
+    ${navBar("followups")}
+    <h1>Follow-ups</h1>
+    <p class="sub">${followups.length} birthday${followups.length === 1 ? "" : "s"} coming up · ${esc(BIRTHDAY_DISCOUNT)} offer</p>
+    <p class="hint">Text is the fastest way. Tap “Text” to open Messages with the note ready, or Copy it. Email is optional.</p>
+    <div class="a-list" style="margin-top:14px">${list}</div>
+  </div>`;
+  return shellPage("Follow-ups · Face Painting CA", body, DASHBOARD_SCRIPT);
+}
+
+// Shared add/edit fields for a client or lead row.
+function clientFields(c = {}) {
+  const v = (x) => esc(x || "");
+  return `
+    <input class="bin" type="text" name="clientName" placeholder="Client name *" value="${v(c.name)}" required>
+    <input class="bin" type="tel" name="clientPhone" placeholder="Phone" value="${v(c.phone)}">
+    <input class="bin" type="email" name="clientEmail" placeholder="Email" value="${v(c.email)}">
+    <div class="hint">Enter at least a phone or an email so we can recognize and reach them.</div>
+    <input class="bin" type="text" name="eventType" placeholder="Last event type (e.g. Birthday Party)" value="${v(c.lastEventType)}">
+    <div class="form-row">
+      <input type="date" name="lastEventDate" value="${v(c.lastEventDate)}">
+      <input class="bin" type="text" name="birthday" placeholder="Birthday MM-DD (optional)" value="${v(c.birthday)}" style="flex:1;min-width:120px">
+    </div>
+    <input class="bin" type="text" name="location" placeholder="Last location / address" value="${v(c.lastLocation)}">
+    <textarea class="bin" name="notes" placeholder="Notes" rows="2">${v(c.notes)}</textarea>`;
+}
+
+function clientCard(c, base) {
+  const key = esc(c.key);
+  const meta = [c.phone, c.email].filter(Boolean).map(esc).join(" · ");
+  const last = [shortDate(c.lastEventDate), c.lastEventType].filter(Boolean).map(esc).join(" · ");
+  const tags = [];
+  if (c.source) tags.push(`<span class="badge b-cancelled">${esc(c.source)}</span>`);
+  if (c.optOut) tags.push(`<span class="badge b-cancelled">opted out</span>`);
+  const bookings =
+    c.totalBookings && c.totalBookings !== "0"
+      ? ` · ${esc(c.totalBookings)} booking${c.totalBookings === "1" ? "" : "s"}`
+      : "";
+  return `<div class="card">
+    <div class="crow">
+      <div class="cname">${esc(c.name || "—")}</div>
+      <div>${tags.join(" ")}</div>
+    </div>
+    ${meta ? `<div class="crmeta">${meta}</div>` : ""}
+    ${last ? `<div class="crmeta">Last: ${last}${bookings}</div>` : ""}
+    ${c.birthday ? `<div class="crmeta">🎂 ${esc(c.birthday)}</div>` : ""}
+    ${c.notes ? `<div class="crmeta">${esc(c.notes)}</div>` : ""}
+    <div class="cactions">
+      ${c.phone ? `<a class="btn btn-text" href="sms:${esc(String(c.phone).replace(/[^\\d+]/g, ""))}">💬 Text</a>` : ""}
+      ${c.email ? `<a class="btn btn-copy" href="mailto:${esc(c.email)}">✉️ Email</a>` : ""}
+      ${askReviewControls(base, { key: c.key, name: c.name, phone: c.phone })}
+      <span class="spacer"></span>
+      <a class="editlink" href="#" data-toggle="ec-${key}">Edit</a>
+    </div>
+    <div id="ec-${key}" class="drawer" hidden>
+      <form method="POST" action="/api/owner" class="bform">
+        <input type="hidden" name="action" value="client-edit">
+        <input type="hidden" name="key" value="${key}">
+        <input type="hidden" name="view" value="clients">
+        ${clientFields(c)}
+        <button class="btn btn-confirm" type="submit">Save changes</button>
+      </form>
+    </div>
+  </div>`;
+}
+
+function addClientForm(action, view, label) {
+  const id = `add-${view}`;
+  return `<button class="btn btn-add" data-toggle="${id}">＋ ${label}</button>
+    <div id="${id}" class="drawer" hidden>
+      <form method="POST" action="/api/owner" class="bform">
+        <input type="hidden" name="action" value="${action}">
+        <input type="hidden" name="view" value="${view}">
+        ${clientFields()}
+        <button class="btn btn-confirm" type="submit">Save</button>
+      </form>
+    </div>`;
+}
+
+export function clientsPage(clients, base) {
+  const sorted = [...clients].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const rows = sorted.length
+    ? sorted.map((c) => clientCard(c, base)).join("")
+    : `<div class="empty">No clients yet. Add the past clients you already know to start.</div>`;
+  const body = `<div class="page">
+    ${navBar("clients")}
+    <div class="headrow">
+      <div><h1>Clients</h1><p class="sub">${sorted.length} in your CRM</p></div>
+    </div>
+    <div style="margin:6px 0 18px">${addClientForm("client-create", "clients", "Add client")}</div>
+    <div class="a-list">${rows}</div>
+  </div>`;
+  return shellPage("Clients · Face Painting CA", body, DASHBOARD_SCRIPT);
+}
+
+export function leadsPage(leads) {
+  const sorted = [...leads].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const rows = sorted.length
+    ? sorted.map(clientCard).join("")
+    : `<div class="empty">No leads yet. Sky saves people who chat but don't book, and you can add your own.</div>`;
+  const body = `<div class="page">
+    ${navBar("leads")}
+    <div class="headrow">
+      <div><h1>Leads</h1><p class="sub">${sorted.length} to follow up</p></div>
+    </div>
+    <div style="margin:6px 0 18px">${addClientForm("lead-create", "leads", "Add lead")}</div>
+    <div class="a-list">${rows}</div>
+  </div>`;
+  return shellPage("Leads · Face Painting CA", body, DASHBOARD_SCRIPT);
+}
+
+// ── Past events ───────────────────────────────────────────────────────────────
+// Current Pacific wall-clock as "YYYY-MM-DDTHH:MM" for lexicographic comparison
+// against an event's end stamp — no timezone math needed.
+function nowPacificStamp() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(new Date());
+  const g = (t) => parts.find((p) => p.type === t)?.value || "00";
+  return `${g("year")}-${g("month")}-${g("day")}T${g("hour")}:${g("minute")}`;
+}
+function bookingEndStamp(b) {
+  const parts = (b.time || "").split(/\s*[-–]\s*/);
+  const end = (parts[1] || parts[0] || "23:59").trim();
+  return `${b.date}T${/^\d{1,2}:\d{2}$/.test(end) ? end.padStart(5, "0") : "23:59"}`;
+}
+function isPastBooking(b, nowStamp) {
+  return b.date && bookingEndStamp(b) < nowStamp;
+}
+
+function pastCard(b, base) {
+  const eid = esc((b.eventId || `${b.client}${b.date}`).replace(/[^a-zA-Z0-9_-]/g, "") || "x");
+  const phone = b.phone ? `<a class="btn btn-text" href="sms:${esc(String(b.phone).replace(/[^\d+]/g, ""))}">💬 Text</a>` : "";
+  const reviewKey = normalizeKey({ phone: b.phone, email: b.email });
+  return `<div class="card">
+    <div class="crow">
+      <div class="cname">${esc(b.client || "—")}</div>
+      <span class="badge b-confirmed">Completed</span>
+    </div>
+    <div class="cwhen">${esc(shortWhen(b))}</div>
+    ${b.location ? `<div class="cloc">${esc(b.location)}</div>` : ""}
+    <div class="cactions">
+      ${phone}
+      ${askReviewControls(base, { key: reviewKey, name: b.client, phone: b.phone })}
+      <button class="btn btn-resched" data-toggle="rb-${eid}">Rebook</button>
+      <span class="spacer"></span>
+      <a class="editlink" href="#" data-toggle="dp-${eid}">Details</a>
+    </div>
+    <div id="dp-${eid}" class="drawer" hidden>${detailsInner(b)}</div>
+    <div id="rb-${eid}" class="drawer" hidden>
+      <form method="POST" action="/api/owner" class="bform">
+        <input type="hidden" name="action" value="create">
+        <input type="hidden" name="view" value="bookings">
+        ${bookingFields({ client: b.client, email: b.email, phone: b.phone, eventType: b.eventType, guests: b.guests, location: b.location, quote: b.quote })}
+        <button class="btn btn-confirm" type="submit">Create booking</button>
+      </form>
+    </div>
+  </div>`;
+}
+
+export function pastPage(past, base) {
+  let list = "";
+  let lastYm = "";
+  for (const b of past) {
+    const g = b.date.slice(0, 7);
+    if (g !== lastYm) {
+      list += `<div class="sec">${monthTitle(g)}</div>`;
+      lastYm = g;
+    }
+    list += pastCard(b, base);
+  }
+  if (!past.length) list = `<div class="empty">No past events yet.</div>`;
+  const body = `<div class="page">
+    ${navBar("past")}
+    <div class="headrow"><div><h1>Past events</h1><p class="sub">${past.length} completed</p></div></div>
+    <p class="hint">Events automatically move here once their time has passed. Tap Rebook to set up a repeat.</p>
+    <div class="a-list" style="margin-top:14px">${list}</div>
+  </div>`;
+  return shellPage("Past · Face Painting CA", body, DASHBOARD_SCRIPT);
+}
+
+// ── Reviews (moderation) ──────────────────────────────────────────────────────
+function starRow(n) {
+  return `<span style="color:#f5b301;font-size:17px;letter-spacing:2px">${"★".repeat(n)}${"☆".repeat(5 - n)}</span>`;
+}
+function reviewCard(r) {
+  const pending = r.status !== "approved";
+  return `<div class="card">
+    <div class="crow">
+      <div class="cname">${esc(r.name || "—")}</div>
+      <span class="badge ${pending ? "b-pending" : "b-confirmed"}">${pending ? "Pending" : "Live"}</span>
+    </div>
+    <div class="cwhen">${starRow(r.rating)}${r.eventType ? ` · ${esc(r.eventType)}` : ""}</div>
+    <div class="crmeta" style="margin-top:8px;color:#4a4740;font-size:15px;line-height:1.5">“${esc(r.text)}”</div>
+    <div class="cactions">
+      ${pending ? actionForm("review-approve", r.id, "reviews", "Approve", "btn btn-confirm") : ""}
+      ${actionForm("review-reject", r.id, "reviews", pending ? "Reject" : "Hide", "btn-plain")}
+      <span class="spacer"></span>
+      <span class="crmeta">${esc(r.submitted || "")}</span>
+    </div>
+  </div>`;
+}
+
+export function reviewsPage(reviews, base) {
+  const pending = reviews.filter((r) => r.status !== "approved" && r.status !== "rejected");
+  const approved = reviews.filter((r) => r.status === "approved");
+  const shareLink = `${base || ""}/review`;
+  const linkBox = `<div class="card" style="margin-bottom:16px">
+      <div class="cname" style="font-size:16px">📣 Your review link</div>
+      <p class="crmeta" style="margin-top:4px">Share this with clients to collect reviews — it opens your review form.</p>
+      <div class="cactions" style="margin-top:12px">
+        <input id="pubreviewlink" type="text" readonly value="${esc(shareLink)}" onclick="this.select()"
+          style="flex:1;min-width:180px;padding:11px 12px;border:1px solid #e7ddcc;border-radius:11px;background:#fdfbf6;font-size:14px;color:#4a4740">
+        <button class="btn btn-copy" data-copy="pubreviewlink">Copy link</button>
+        <a class="btn btn-text" href="sms:?&body=${encodeURIComponent(`We'd love a quick review! ${shareLink}`)}">💬 Text it</a>
+      </div>
+    </div>`;
+  const body = `<div class="page">
+    ${navBar("reviews")}
+    <div class="headrow"><div><h1>Reviews</h1><p class="sub">${pending.length} pending · ${approved.length} live on your site</p></div></div>
+    <p class="hint">Approve the ones you want public. Approved reviews show on your website. For a link personalized to one client, use “Ask for review” on the Clients or Past tab.</p>
+    ${linkBox}
+    <div class="sec">Pending</div>
+    ${pending.length ? pending.map(reviewCard).join("") : `<div class="empty">No new reviews.</div>`}
+    <div class="sec">Live on your site</div>
+    ${approved.length ? approved.map(reviewCard).join("") : `<div class="empty">No approved reviews yet.</div>`}
+  </div>`;
+  return shellPage("Reviews · Face Painting CA", body, DASHBOARD_SCRIPT);
+}
 
 export function dashboardPage(bookings, ym) {
   const today = todayPacific();
@@ -481,6 +824,7 @@ export function dashboardPage(bookings, ym) {
 
   const body = `<div class="app">
     <div class="a-head">
+      ${navBar("bookings")}
       <div class="a-head-row">
         <div>
           <h1>Bookings</h1>
@@ -498,7 +842,57 @@ export function dashboardPage(bookings, ym) {
 
 // Performs a create/edit action from the dashboard, then mirrors the result to
 // the sheet. Writes go straight to Google Calendar (the source of truth).
-async function handleAction(body) {
+async function handleAction(body, base) {
+  // ── Client / lead create + edit (Clients tab) ──────────────────────────────
+  if (body.action === "client-create" || body.action === "client-edit" || body.action === "lead-create") {
+    const rec = {
+      name: (body.clientName || "").trim(),
+      phone: (body.clientPhone || "").trim(),
+      email: (body.clientEmail || "").trim(),
+      lastEventType: (body.eventType || "").trim(),
+      lastEventDate: (body.lastEventDate || "").trim(),
+      lastLocation: (body.location || "").trim(),
+      birthday: (body.birthday || "").trim(),
+      notes: (body.notes || "").trim(),
+      source: body.action === "lead-create" ? "lead" : "manual",
+    };
+    if (body.key) rec.key = String(body.key).trim(); // preserve identity on edit
+    // Need a name and at least one contact method to key/reach them.
+    if (!rec.name || !(rec.phone || rec.email)) return;
+    await upsertClient(rec);
+    return;
+  }
+
+  // ── Send the birthday discount email + stamp Last Promo Sent ────────────────
+  if (body.action === "promo") {
+    const key = (body.key || "").trim();
+    if (!key) return;
+    const clients = await getClients();
+    const c = clients.find((x) => x.key === key);
+    if (!c || !c.email) return;
+    const token = optoutToken(key);
+    const unsubscribeUrl = `${base}/api/status?action=optout&key=${encodeURIComponent(key)}&token=${token}`;
+    const htmlBody = birthdayPromoHtml(c, { discount: BIRTHDAY_DISCOUNT, unsubscribeUrl });
+    await sendEmail({ to: c.email, subject: "A birthday treat from Face Painting California 🎂", html: htmlBody });
+    await setClientFlag(key, { lastPromoSent: todayPacific() });
+    return;
+  }
+
+  // ── Owner marks a follow-up client as not interested ───────────────────────
+  if (body.action === "optout-owner") {
+    const key = (body.key || "").trim();
+    if (key) await setClientFlag(key, { optOut: true });
+    return;
+  }
+
+  // ── Review moderation (approve / reject) ───────────────────────────────────
+  if (body.action === "review-approve" || body.action === "review-reject") {
+    const id = (body.key || "").trim();
+    if (id) await setReviewStatus(id, body.action === "review-approve" ? "approved" : "rejected");
+    return;
+  }
+
+  // ── Booking create / edit (Calendar) ───────────────────────────────────────
   const d = {
     clientName: (body.clientName || "").trim(),
     clientEmail: (body.clientEmail || "").trim(),
@@ -549,17 +943,20 @@ export default async function handler(req, res) {
       body = {};
     }
 
-    // An authed create/edit action (from the Add event / Edit forms).
+    // An authed action (booking, client/lead, promo, opt-out forms).
     if (body.action) {
       if (!isAuthed(req)) return html(200, loginPage("Please sign in again."));
+      const proto = req.headers["x-forwarded-proto"] || (String(req.headers.host || "").includes("localhost") ? "http" : "https");
+      const base = `${proto}://${req.headers.host}`;
       try {
-        await handleAction(body);
+        await handleAction(body, base);
       } catch (error) {
         console.error("Owner action error:", error);
       }
-      // Redirect so a refresh doesn't resubmit the form.
+      // Redirect so a refresh doesn't resubmit the form; return to the same view.
+      const view = /^(followups|clients|leads|past|reviews)$/.test(body.view || "") ? `?view=${body.view}` : "";
       res.statusCode = 303;
-      res.setHeader("Location", "/api/owner");
+      res.setHeader("Location", `/api/owner${view}`);
       return res.end();
     }
 
@@ -574,11 +971,47 @@ export default async function handler(req, res) {
   }
 
   try {
-    const ym = new URL(req.url, "http://localhost").searchParams.get("ym");
+    const params = new URL(req.url, "http://localhost").searchParams;
+    const view = params.get("view") || "bookings";
+    const proto = req.headers["x-forwarded-proto"] || (String(req.headers.host || "").includes("localhost") ? "http" : "https");
+    const base = process.env.APP_BASE_URL || `${proto}://${req.headers.host}`;
+
+    if (view === "reviews") {
+      return html(200, reviewsPage(await getReviews(), base));
+    }
+    if (view === "past") {
+      const rows = await getBookingsFromSheet();
+      const now = nowPacificStamp();
+      const past = rows
+        .filter((b) => b.status !== "CANCELLED" && isPastBooking(b, now))
+        .sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
+      return html(200, pastPage(past, base));
+    }
+    if (view === "clients") {
+      return html(200, clientsPage(await getClients(), base));
+    }
+    if (view === "leads") {
+      const clients = await getClients();
+      return html(200, leadsPage(clients.filter((c) => c.source === "lead")));
+    }
+    if (view === "followups") {
+      // Exclude clients who already have a future booking on the calendar.
+      const [clients, bookings] = await Promise.all([getClients(), listCalendarBookings()]);
+      const today = todayPacific();
+      const excludeKeys = new Set(
+        bookings
+          .filter((b) => b.status !== "CANCELLED" && b.date >= today)
+          .map((b) => normalizeKey({ phone: b.phone, email: b.email }))
+          .filter(Boolean)
+      );
+      const followups = await listBirthdayFollowups({ clients, excludeKeys });
+      return html(200, followupsPage(followups));
+    }
+
     const bookings = await listCalendarBookings();
-    return html(200, dashboardPage(bookings, ym));
+    return html(200, dashboardPage(bookings, params.get("ym")));
   } catch (error) {
     console.error("Owner dashboard error:", error);
-    return html(500, shellPage("Error", `<div class="login"><h1>Something went wrong</h1><p class="sub">Couldn't load bookings. Check the server logs.</p></div>`));
+    return html(500, shellPage("Error", `<div class="login"><h1>Something went wrong</h1><p class="sub">Couldn't load the dashboard. Check the server logs.</p></div>`));
   }
 }

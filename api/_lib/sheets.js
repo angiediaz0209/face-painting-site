@@ -232,3 +232,309 @@ export async function addBookingToSheet(bookingInput, bookingResult) {
   console.log(`Booking synced to Google Sheet: ${bookingInput.clientName}`);
   return result;
 }
+
+// ── Clients tab (CRM) ─────────────────────────────────────────────────────────
+// A second tab in the same spreadsheet, keyed by a normalized phone/email so a
+// client is a single row across every source (a booking, a manually-added past
+// client, or a chat lead). Bookings feed it automatically; the owner also edits
+// it by hand. Keep column order stable — the follow-ups + recognition logic in
+// clients.js reads by index.
+const CLIENT_HEADERS = [
+  "Key", // 0  normalized phone digits or lowercased email (dedupe key)
+  "Name", // 1
+  "Phone", // 2
+  "Email", // 3
+  "Source", // 4  booking | manual | lead
+  "Last Event Date", // 5  YYYY-MM-DD
+  "Last Event Type", // 6
+  "Last Location", // 7
+  "Birthday", // 8  MM-DD (optional, overrides the event-date anniversary)
+  "Total Bookings", // 9
+  "Opt-out", // 10 marketing opt-out (TRUE / blank)
+  "Last Promo Sent", // 11 YYYY-MM-DD of the last discount email
+  "First Seen", // 12 timestamp, preserved
+  "Notes", // 13
+];
+const CLIENT_RANGE = "Clients!A:N";
+const SOURCE_RANK = { lead: 1, manual: 2, booking: 3 };
+
+function isTruthyCell(v) {
+  return /^(true|yes|1|y)$/i.test((v || "").trim());
+}
+
+function rowToClient(cells, rowNumber) {
+  const g = (i) => (cells[i] || "").trim();
+  return {
+    rowNumber,
+    key: g(0),
+    name: g(1),
+    phone: g(2),
+    email: g(3),
+    source: g(4),
+    lastEventDate: g(5),
+    lastEventType: g(6),
+    lastLocation: g(7),
+    birthday: g(8),
+    totalBookings: g(9),
+    optOut: isTruthyCell(cells[10]),
+    lastPromoSent: g(11),
+    firstSeen: g(12),
+    notes: g(13),
+  };
+}
+
+function clientToRow(c) {
+  return [
+    c.key,
+    c.name,
+    c.phone,
+    c.email,
+    c.source,
+    c.lastEventDate,
+    c.lastEventType,
+    c.lastLocation,
+    c.birthday,
+    c.totalBookings,
+    c.optOut ? "TRUE" : "",
+    c.lastPromoSent,
+    c.firstSeen,
+    c.notes,
+  ].map((v) => (v == null ? "" : String(v)));
+}
+
+// Field-level merge: a non-empty incoming value wins, except First Seen (kept),
+// source (never downgraded — a real client stays a client, not a lead), opt-out
+// (only changed when explicitly set), and Total Bookings (incremented on a new
+// booking).
+function mergeClient(existing, incoming, incrementBookings) {
+  const e = existing || {};
+  const pick = (a, b) => (a != null && String(a).trim() !== "" ? String(a).trim() : b || "");
+
+  let source = pick(incoming.source, e.source);
+  if (e.source && incoming.source && (SOURCE_RANK[incoming.source] || 0) < (SOURCE_RANK[e.source] || 0)) {
+    source = e.source;
+  }
+
+  let totalBookings = pick(incoming.totalBookings, e.totalBookings);
+  if (incrementBookings) {
+    totalBookings = String((parseInt(e.totalBookings, 10) || 0) + 1);
+  }
+
+  return {
+    key: incoming.key || e.key,
+    name: pick(incoming.name, e.name),
+    phone: pick(incoming.phone, e.phone),
+    email: pick(incoming.email, e.email),
+    source,
+    lastEventDate: pick(incoming.lastEventDate, e.lastEventDate),
+    lastEventType: pick(incoming.lastEventType, e.lastEventType),
+    lastLocation: pick(incoming.lastLocation, e.lastLocation),
+    birthday: pick(incoming.birthday, e.birthday),
+    totalBookings,
+    optOut: incoming.optOut != null ? !!incoming.optOut : !!e.optOut,
+    lastPromoSent: pick(incoming.lastPromoSent, e.lastPromoSent),
+    firstSeen: e.firstSeen || nowStamp(),
+    notes: pick(incoming.notes, e.notes),
+  };
+}
+
+/** Creates the "Clients" tab if missing and makes sure row 1 holds the headers. */
+async function ensureClientsSheet(sheets, sheetId) {
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId: sheetId,
+    fields: "sheets.properties.title",
+  });
+  const exists = (meta.data.sheets || []).some((s) => s.properties?.title === "Clients");
+  if (!exists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: sheetId,
+      requestBody: { requests: [{ addSheet: { properties: { title: "Clients" } } }] },
+    });
+  }
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: "Clients!A1:N1" });
+  const current = res.data.values?.[0] || [];
+  if (current.join("|") !== CLIENT_HEADERS.join("|")) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: sheetId,
+      range: "Clients!A1:N1",
+      valueInputOption: "RAW",
+      requestBody: { values: [CLIENT_HEADERS] },
+    });
+  }
+}
+
+/** Returns every client row (excluding the header) as normalized objects. */
+export async function getClients() {
+  const client = getSheetsClient();
+  if (!client) return [];
+  const { sheets, sheetId } = client;
+  await ensureClientsSheet(sheets, sheetId);
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: CLIENT_RANGE });
+  const rows = res.data.values || [];
+  return rows
+    .slice(1)
+    .map((cells, i) => rowToClient(cells, i + 2))
+    .filter((c) => c.key);
+}
+
+/**
+ * Upserts a client by Key: merges into the existing row if one is found, else
+ * appends a new one. Pass `incrementBookings: true` from the booking flow to bump
+ * the Total Bookings counter. Returns the merged client (or null if no sheet).
+ */
+export async function upsertClient(record, { incrementBookings = false } = {}) {
+  if (!record?.key) return null;
+  const client = getSheetsClient();
+  if (!client) return null;
+  const { sheets, sheetId } = client;
+  await ensureClientsSheet(sheets, sheetId);
+
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: CLIENT_RANGE });
+  const rows = res.data.values || [];
+  let existing = null;
+  for (let i = 1; i < rows.length; i++) {
+    if ((rows[i][0] || "").trim() === record.key) {
+      existing = rowToClient(rows[i], i + 1);
+      break;
+    }
+  }
+
+  const merged = mergeClient(existing, record, incrementBookings);
+  const row = clientToRow(merged);
+  if (existing) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: sheetId,
+      range: `Clients!A${existing.rowNumber}:N${existing.rowNumber}`,
+      valueInputOption: "RAW",
+      requestBody: { values: [row] },
+    });
+  } else {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: sheetId,
+      range: CLIENT_RANGE,
+      valueInputOption: "RAW",
+      insertDataOption: "INSERT_ROWS",
+      requestBody: { values: [row] },
+    });
+  }
+  return merged;
+}
+
+// ── Booking history (read the tracker) ────────────────────────────────────────
+// The Sheet1 tracker keeps every booking that ever synced, including past ones
+// beyond the calendar's 30-day read window — so it's the durable archive the
+// "Past events" view reads from.
+export async function getBookingsFromSheet() {
+  const client = getSheetsClient();
+  if (!client) return [];
+  const { sheets, sheetId } = client;
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: RANGE });
+  const rows = res.data.values || [];
+  return rows
+    .slice(1)
+    .map((c) => ({
+      status: (c[0] || "").toUpperCase(),
+      date: (c[1] || "").trim(),
+      time: (c[2] || "").trim(),
+      client: (c[3] || "").trim(),
+      phone: (c[4] || "").trim(),
+      email: (c[5] || "").trim(),
+      eventType: (c[6] || "").trim(),
+      guests: (c[7] || "").trim(),
+      location: (c[8] || "").trim(),
+      quote: (c[9] || "").trim(),
+      notes: (c[12] || "").trim(), // M Notes
+      eventId: (c[COL.EVENT_ID] || "").trim(),
+    }))
+    .filter((b) => b.date);
+}
+
+// ── Reviews tab ───────────────────────────────────────────────────────────────
+// Client-submitted reviews land here as "pending"; the owner approves the ones
+// that should appear publicly on the website (served via /api/review?list=1).
+const REVIEW_HEADERS = ["ID", "Status", "Submitted", "Name", "Rating", "Event Type", "Text", "Key"];
+const REVIEW_RANGE = "Reviews!A:H";
+
+function rowToReview(cells, rowNumber) {
+  const g = (i) => (cells[i] || "").trim();
+  return {
+    rowNumber,
+    id: g(0),
+    status: g(1).toLowerCase() || "pending",
+    submitted: g(2),
+    name: g(3),
+    rating: Math.min(5, Math.max(1, parseInt(g(4), 10) || 5)),
+    eventType: g(5),
+    text: g(6),
+    key: g(7), // client key (from a one-time link), blank for the generic form
+  };
+}
+
+async function ensureReviewsSheet(sheets, sheetId) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId, fields: "sheets.properties.title" });
+  const exists = (meta.data.sheets || []).some((s) => s.properties?.title === "Reviews");
+  if (!exists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: sheetId,
+      requestBody: { requests: [{ addSheet: { properties: { title: "Reviews" } } }] },
+    });
+  }
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: "Reviews!A1:H1" });
+  const current = res.data.values?.[0] || [];
+  if (current.join("|") !== REVIEW_HEADERS.join("|")) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: sheetId,
+      range: "Reviews!A1:H1",
+      valueInputOption: "RAW",
+      requestBody: { values: [REVIEW_HEADERS] },
+    });
+  }
+}
+
+export async function getReviews() {
+  const client = getSheetsClient();
+  if (!client) return [];
+  const { sheets, sheetId } = client;
+  await ensureReviewsSheet(sheets, sheetId);
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: REVIEW_RANGE });
+  const rows = res.data.values || [];
+  return rows.slice(1).map((c, i) => rowToReview(c, i + 2)).filter((r) => r.id);
+}
+
+/** Appends a new client-submitted review as "pending". Returns its id. */
+export async function addReview({ name, rating, eventType, text, key }) {
+  const client = getSheetsClient();
+  if (!client) return null;
+  const { sheets, sheetId } = client;
+  await ensureReviewsSheet(sheets, sheetId);
+  const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  const row = [id, "pending", nowStamp(), name, String(rating), eventType || "", text, key || ""];
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: sheetId,
+    range: REVIEW_RANGE,
+    valueInputOption: "RAW",
+    insertDataOption: "INSERT_ROWS",
+    requestBody: { values: [row] },
+  });
+  return id;
+}
+
+/** Sets a review's Status by ID ("approved" / "rejected" / "pending"). */
+export async function setReviewStatus(id, status) {
+  const client = getSheetsClient();
+  if (!client) return;
+  const { sheets, sheetId } = client;
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: REVIEW_RANGE });
+  const rows = res.data.values || [];
+  for (let i = 1; i < rows.length; i++) {
+    if ((rows[i][0] || "").trim() === id) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: sheetId,
+        range: `Reviews!B${i + 1}`,
+        valueInputOption: "RAW",
+        requestBody: { values: [[status]] },
+      });
+      return;
+    }
+  }
+}

@@ -4,6 +4,7 @@ import { createBooking, checkAvailability } from "./_lib/book.js";
 import { sendBookingNotification } from "./_lib/notify.js";
 import { addBookingToSheet } from "./_lib/sheets.js";
 import { computeQuote } from "./_lib/pricing.js";
+import { lookupClient, upsertClient } from "./_lib/clients.js";
 
 const AVAILABILITY_TOOL = {
   name: "check_availability",
@@ -123,7 +124,43 @@ const QUOTE_TOOL = {
   },
 };
 
-const TOOLS = [QUOTE_TOOL, AVAILABILITY_TOOL, BOOKING_TOOL];
+const LOOKUP_CLIENT_TOOL = {
+  name: "lookup_client",
+  description:
+    "Checks whether this is a RETURNING client, by phone and/or email. Call it once you have the client's phone or email, before asking for details we might already have (like their address). If it returns known=true, greet them warmly by name and offer what we already know — e.g. 'Want this at the same address as last time, 123 Oak St?'. Only treat someone as returning when THIS tool says so; never assume it from a first name.",
+  input_schema: {
+    type: "object",
+    properties: {
+      phone: { type: "string", description: "The client's phone number, if known." },
+      email: { type: "string", description: "The client's email, if known." },
+    },
+  },
+};
+
+const SAVE_LEAD_TOOL = {
+  name: "save_lead",
+  description:
+    "Saves a potential client (a lead) so the team can follow up later. Call this when you have the person's name and a phone or email but the chat is ending WITHOUT a booking (they're just checking prices, thinking it over, or not ready yet). Do NOT call it if you already created a booking for them.",
+  input_schema: {
+    type: "object",
+    properties: {
+      name: { type: "string", description: "The person's name." },
+      phone: { type: "string", description: "Their phone number, if given." },
+      email: { type: "string", description: "Their email, if given." },
+      eventType: {
+        type: "string",
+        description: "The kind of event they asked about, if known (e.g. Birthday Party).",
+      },
+      notes: {
+        type: "string",
+        description: "A short note: what they wanted, their city/date, or why they didn't book yet.",
+      },
+    },
+    required: ["name"],
+  },
+};
+
+const TOOLS = [QUOTE_TOOL, AVAILABILITY_TOOL, BOOKING_TOOL, LOOKUP_CLIENT_TOOL, SAVE_LEAD_TOOL];
 
 // ── Abuse protection ────────────────────────────────────────────────────────
 // /api/chat is public and costs money per message (and can create real
@@ -173,6 +210,52 @@ async function handleToolUse(toolUse) {
         type: "tool_result",
         tool_use_id: toolUse.id,
         content: JSON.stringify({ error: "Could not calculate the quote." }),
+      };
+    }
+  }
+
+  if (toolUse.name === "lookup_client") {
+    try {
+      const result = await lookupClient(toolUse.input);
+      return {
+        type: "tool_result",
+        tool_use_id: toolUse.id,
+        content: JSON.stringify(result),
+      };
+    } catch (error) {
+      console.error("Client lookup error:", error);
+      // Fail closed: on error, treat them as a new client rather than guessing.
+      return {
+        type: "tool_result",
+        tool_use_id: toolUse.id,
+        content: JSON.stringify({ known: false }),
+      };
+    }
+  }
+
+  if (toolUse.name === "save_lead") {
+    try {
+      const { name, phone, email, eventType, notes } = toolUse.input;
+      const saved = await upsertClient({
+        name,
+        phone,
+        email,
+        source: "lead",
+        lastEventType: eventType || "",
+        notes: notes || "",
+      });
+      return {
+        type: "tool_result",
+        tool_use_id: toolUse.id,
+        // saved is null when there's no phone/email to key/contact the lead by.
+        content: JSON.stringify({ saved: !!saved }),
+      };
+    } catch (error) {
+      console.error("Save lead error:", error);
+      return {
+        type: "tool_result",
+        tool_use_id: toolUse.id,
+        content: JSON.stringify({ saved: false }),
       };
     }
   }
@@ -242,6 +325,20 @@ async function handleToolUse(toolUse) {
         addBookingToSheet(bookingInput, bookingResult).catch((err) =>
           console.error("Sheet error:", err)
         ),
+        // Keep the client CRM current so this client is recognized next time and
+        // shows up for birthday follow-ups.
+        upsertClient(
+          {
+            name: bookingInput.clientName,
+            phone: bookingInput.clientPhone,
+            email: bookingInput.clientEmail,
+            source: "booking",
+            lastEventDate: bookingInput.date,
+            lastEventType: bookingInput.eventType,
+            lastLocation: bookingInput.location,
+          },
+          { incrementBookings: true }
+        ).catch((err) => console.error("Client upsert error:", err)),
       ]);
 
       return {

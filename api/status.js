@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { getBooking } from "./_lib/book.js";
 import { clientStatusHtml } from "./_lib/email.js";
+import { setClientFlag } from "./_lib/clients.js";
 
 // Same secret + token scheme as api/confirm.js / api/decline.js / api/notify.js
 // so a single HMAC of the eventId gates the client's private status link.
@@ -10,6 +11,15 @@ function expectedToken(eventId) {
   return crypto
     .createHmac("sha256", CONFIRM_SECRET)
     .update(eventId)
+    .digest("hex")
+    .slice(0, 32);
+}
+
+// Token gating the marketing unsubscribe link (over the client key, not an event).
+export function optoutToken(key) {
+  return crypto
+    .createHmac("sha256", CONFIRM_SECRET)
+    .update(`optout:${key}`)
     .digest("hex")
     .slice(0, 32);
 }
@@ -31,6 +41,50 @@ export default async function handler(req, res) {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.end(html);
   };
+
+  // ── Marketing unsubscribe (from the birthday promo email) ───────────────────
+  // GET shows a confirm page with a POST button, so an email link-scanner can't
+  // silently opt someone out; POST performs the opt-out.
+  if (url.searchParams.get("action") === "optout") {
+    const key = url.searchParams.get("key") || "";
+    const otoken = url.searchParams.get("token") || "";
+    const expected = optoutToken(key);
+    const ok =
+      key &&
+      otoken.length === expected.length &&
+      crypto.timingSafeEqual(Buffer.from(otoken), Buffer.from(expected));
+    if (!ok) {
+      return send(403, fallbackPage("<h2>Invalid link</h2><p>This unsubscribe link isn't valid.</p>"));
+    }
+    if (req.method !== "POST") {
+      const qs = `action=optout&key=${encodeURIComponent(key)}&token=${encodeURIComponent(otoken)}`;
+      return send(
+        200,
+        fallbackPage(
+          `<h2>Unsubscribe from offers?</h2>
+           <p>You'll still get confirmations for events you book, just no promotions.</p>
+           <form method="POST" action="/api/status?${qs}">
+             <button type="submit" style="background:#ef6c4d;color:#fff;border:none;padding:13px 26px;border-radius:24px;font-weight:700;font-size:15px;cursor:pointer;">Yes, unsubscribe</button>
+           </form>`
+        )
+      );
+    }
+    try {
+      await setClientFlag(key, { optOut: true });
+      return send(
+        200,
+        fallbackPage(
+          "<h2>You're unsubscribed</h2><p>You won't receive promotional emails from Face Painting California. You'll still get confirmations for events you book. Changed your mind? Text us at (415) 991-9374.</p>"
+        )
+      );
+    } catch (error) {
+      console.error("Opt-out error:", error);
+      return send(
+        500,
+        fallbackPage("<h2>Something went wrong</h2><p>We couldn't update your preferences. Please text us at (415) 991-9374.</p>")
+      );
+    }
+  }
 
   if (!eventId || !token) {
     return send(400, fallbackPage("<h2>Incomplete link</h2><p>This status link is missing information.</p>"));

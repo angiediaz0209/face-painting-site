@@ -1,6 +1,8 @@
+import { useState, useEffect } from 'react';
 import { StarIcon } from './Icons';
 
-const reviews = [
+// Shown until (and unless) approved reviews load from /api/review.
+const fallbackReviews = [
   {
     name: 'Sarah M.',
     event: 'Birthday Party',
@@ -27,7 +29,39 @@ const reviews = [
   },
 ];
 
+const palette = [
+  ['bg-coral', 'text-coral'],
+  ['bg-purple', 'text-purple'],
+  ['bg-teal', 'text-teal'],
+];
+
 export default function Reviews() {
+  const [reviews, setReviews] = useState(fallbackReviews);
+
+  // Load owner-approved reviews; keep the built-in ones if none/failed.
+  useEffect(() => {
+    let active = true;
+    fetch('/api/review?list=1')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        if (!active || !Array.isArray(data) || data.length === 0) return;
+        setReviews(
+          data.map((r, i) => ({
+            name: r.name || 'Happy client',
+            event: r.event || '',
+            text: r.text || '',
+            stars: Math.min(5, Math.max(1, Number(r.rating) || 5)),
+            color: palette[i % palette.length][0],
+            starColor: palette[i % palette.length][1],
+          }))
+        );
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <section id="reviews" className="relative py-14 sm:py-24 bg-white overflow-hidden">
       {/* pale accent blob (like the reference) */}
