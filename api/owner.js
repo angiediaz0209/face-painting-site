@@ -133,7 +133,7 @@ const STYLE = `
   .drawer{margin-top:14px}
   .drawer[hidden]{display:none}
   .bform{display:flex;flex-direction:column;gap:9px}
-  .bform .bin,.form-row input{padding:11px 12px;border:1px solid #e7ddcc;border-radius:11px;font-size:15px;width:100%;background:#fdfbf6;font-family:inherit}
+  .bform .bin,.form-row input{padding:11px 12px;border:1px solid #e7ddcc;border-radius:11px;font-size:16px;width:100%;background:#fdfbf6;font-family:inherit}
   .bform textarea.bin{resize:vertical}
   .form-row{display:flex;gap:8px;flex-wrap:wrap}
   .form-row input{flex:1;min-width:120px}
@@ -173,10 +173,28 @@ const STYLE = `
   .cd.today .dot{background:#b0542e}
   .callink{display:inline-block;margin-top:16px;font-size:13px;color:#b0542e;text-decoration:none}
 
-  /* Top nav (CRM views) */
+  /* Top nav (CRM views) — desktop */
   .nav{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}
   .nav a{font-size:14px;font-weight:700;color:#8a8378;text-decoration:none;padding:7px 14px;border-radius:18px;background:#efe6d6}
   .nav a.on{background:#b0542e;color:#fff}
+
+  /* Mobile app-style bottom tab bar */
+  .tabbar{display:none}
+  @media(max-width:899px){
+    .nav{display:none}
+    .tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;background:#fff;
+      border-top:1px solid #ece2d1;box-shadow:0 -6px 22px rgba(70,45,20,.07);
+      padding:7px 2px calc(7px + env(safe-area-inset-bottom))}
+    .tabbar a{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;
+      text-decoration:none;color:#a29a8b;font-size:9.5px;font-weight:700;padding:3px 1px}
+    .tabbar a .ic{font-size:20px;line-height:1}
+    .tabbar a span.lbl{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .tabbar a.on{color:#b0542e}
+    .tabbar a.on .ic{transform:translateY(-1px)}
+    /* leave room above the fixed bar + notch */
+    .app,.page{padding-bottom:calc(84px + env(safe-area-inset-bottom))!important}
+    .app{padding-top:calc(6px + env(safe-area-inset-top))}
+  }
 
   /* CRM page wrap + follow-up / client extras */
   .page{max-width:660px;margin:0 auto;padding:14px 12px 48px}
@@ -202,7 +220,17 @@ const STYLE = `
 `;
 
 function shellPage(title, body, script = "") {
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${STYLE}</style></head><body>${body}${script}</body></html>`;
+  const head = `<meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Bookings">
+    <meta name="theme-color" content="#f6f0e4">
+    <meta name="format-detection" content="telephone=no">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%23b0542e'/%3E%3Ctext x='90' y='128' font-size='104' text-anchor='middle'%3E%F0%9F%8E%A8%3C/text%3E%3C/svg%3E">
+    <title>${title}</title><style>${STYLE}</style>`;
+  return `<!doctype html><html><head>${head}</head><body>${body}${script}</body></html>`;
 }
 
 function esc(s) {
@@ -494,21 +522,27 @@ const DASHBOARD_SCRIPT = `<script>
 </script>`;
 
 // ── CRM views (Follow-ups / Clients / Leads) ─────────────────────────────────
+// Desktop shows pill tabs at the top; mobile gets an app-style fixed bottom bar.
 function navBar(active) {
   const items = [
-    ["bookings", "Bookings"],
-    ["past", "Past"],
-    ["followups", "Follow-ups"],
-    ["clients", "Clients"],
-    ["leads", "Leads"],
-    ["reviews", "Reviews"],
+    ["bookings", "Bookings", "📅"],
+    ["past", "Past", "🕘"],
+    ["followups", "Follow-ups", "🎂"],
+    ["clients", "Clients", "👥"],
+    ["leads", "Leads", "🌱"],
+    ["reviews", "Reviews", "⭐"],
   ];
-  return `<div class="nav">${items
+  const href = (k) => `/api/owner${k === "bookings" ? "" : `?view=${k}`}`;
+  const top = items
+    .map(([k, label]) => `<a class="${k === active ? "on" : ""}" href="${href(k)}">${label}</a>`)
+    .join("");
+  const bottom = items
     .map(
-      ([k, label]) =>
-        `<a class="${k === active ? "on" : ""}" href="/api/owner${k === "bookings" ? "" : `?view=${k}`}">${label}</a>`
+      ([k, label, ic]) =>
+        `<a class="${k === active ? "on" : ""}" href="${href(k)}"><span class="ic">${ic}</span><span class="lbl">${label}</span></a>`
     )
-    .join("")}</div>`;
+    .join("");
+  return `<div class="nav">${top}</div><nav class="tabbar">${bottom}</nav>`;
 }
 
 // A hidden POST form reduced to a single button (used for the one-off card actions).
