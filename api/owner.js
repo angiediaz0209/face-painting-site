@@ -150,8 +150,7 @@ const STYLE = `
   .dempty{color:#a29a8b;font-size:14px}
 
   /* Calendar */
-  .calbox{background:#fff;border:1px solid #efe6d6;border-radius:16px;padding:16px 14px}
-  @media(min-width:900px){ .calbox{background:transparent;border:none;border-radius:0;padding:0} }
+  .calbox{background:#fff;border:1px solid #efe6d6;border-radius:16px;padding:18px 16px}
   .month{max-width:400px;margin:0 auto}
   .month.second{display:none}
   @media(min-width:900px){ .month.second{display:block;margin-top:26px;padding-top:22px;border-top:1px solid #f0e8d9} }
@@ -173,15 +172,39 @@ const STYLE = `
   .cd.today .dot{background:#b0542e}
   .callink{display:inline-block;margin-top:16px;font-size:13px;color:#b0542e;text-decoration:none}
 
-  /* Top nav (CRM views) — desktop */
-  .nav{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}
-  .nav a{font-size:14px;font-weight:700;color:#8a8378;text-decoration:none;padding:7px 14px;border-radius:18px;background:#efe6d6}
-  .nav a.on{background:#b0542e;color:#fff}
+  /* ── App shell: sidebar (desktop) + content ─────────────────────────────── */
+  .shell{min-height:100vh}
+  .content{max-width:760px;margin:0 auto;padding:14px 12px calc(84px + env(safe-area-inset-bottom))}
+  .sidebar{display:none}
+  @media(min-width:900px){
+    .shell{display:grid;grid-template-columns:236px minmax(0,1fr)}
+    .sidebar{display:flex;flex-direction:column;position:sticky;top:0;align-self:start;height:100vh;
+      background:#f6f0e4;border-right:1px solid #ece2d1;padding:24px 16px}
+    .content{max-width:1120px;margin:0;padding:30px 40px 60px}
+  }
+  .brand{display:flex;align-items:center;gap:10px;padding:4px 8px 4px 6px;margin-bottom:18px}
+  .brand .bt{display:flex;flex-direction:column;font-family:${SERIF};line-height:1.05;color:#2b2a28;font-size:16px;font-weight:700}
+  .brand .bt b{font-weight:400;font-size:12px;color:#a29a8b;letter-spacing:.5px;text-transform:uppercase}
+  .sidenav{display:flex;flex-direction:column;gap:3px}
+  .sidenav a{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:12px;text-decoration:none;color:#7c7566;font-weight:700;font-size:15px}
+  .sidenav a .si{display:flex;line-height:0}
+  .sidenav a .si svg{width:20px;height:20px}
+  .sidenav a:hover{background:#efe6d6;color:#2b2a28}
+  .sidenav a.on{background:#b0542e;color:#fff}
+
+  /* View header (title + optional action) */
+  .vhead{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:14px}
+
+  /* Bookings two-pane + responsive card grids for the CRM views */
+  .bkgrid{display:grid;grid-template-columns:1fr;gap:22px}
+  @media(min-width:1040px){ .bkgrid{grid-template-columns:minmax(0,1fr) 400px} .bkcal{position:sticky;top:24px;align-self:start} }
+  .cardgrid{display:grid;grid-template-columns:1fr;gap:14px;align-items:start}
+  @media(min-width:760px){ .cardgrid{grid-template-columns:repeat(auto-fill,minmax(320px,1fr))} }
+  .cardgrid > .sec,.cardgrid > .fullrow{grid-column:1/-1}
 
   /* Mobile app-style bottom tab bar */
   .tabbar{display:none}
   @media(max-width:899px){
-    .nav{display:none}
     .tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;background:#fff;
       border-top:1px solid #ece2d1;box-shadow:0 -6px 22px rgba(70,45,20,.07);
       padding:7px 2px calc(7px + env(safe-area-inset-bottom))}
@@ -191,14 +214,10 @@ const STYLE = `
     .tabbar a .ic svg{width:23px;height:23px;display:block}
     .tabbar a span.lbl{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .tabbar a.on{color:#b0542e}
-    /* leave room above the fixed bar + notch */
-    .app,.page{padding-bottom:calc(84px + env(safe-area-inset-bottom))!important}
-    .app{padding-top:calc(6px + env(safe-area-inset-top))}
+    .content{padding-top:calc(6px + env(safe-area-inset-top))}
   }
 
-  /* CRM page wrap + follow-up / client extras */
-  .page{max-width:660px;margin:0 auto;padding:14px 12px 48px}
-  @media(min-width:900px){ .page{max-width:820px;margin:26px auto;padding:0 8px} }
+  /* CRM page extras */
   .headrow{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:6px}
   .fmeta{color:#7c8676;font-size:14.5px;margin-top:7px}
   .fsub{color:#b3ab9c;font-size:14px;margin-top:4px}
@@ -535,28 +554,39 @@ function icon(name) {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
 }
 
-// ── CRM views (Follow-ups / Clients / Leads) ─────────────────────────────────
-// Desktop shows pill tabs at the top; mobile gets an app-style fixed bottom bar.
-function navBar(active) {
-  const items = [
-    ["bookings", "Bookings", "cal"],
-    ["past", "Past", "clock"],
-    ["followups", "Follow-ups", "gift"],
-    ["clients", "Clients", "users"],
-    ["leads", "Leads", "userplus"],
-    ["reviews", "Reviews", "star"],
-  ];
-  const href = (k) => `/api/owner${k === "bookings" ? "" : `?view=${k}`}`;
-  const top = items
-    .map(([k, label]) => `<a class="${k === active ? "on" : ""}" href="${href(k)}">${label}</a>`)
-    .join("");
-  const bottom = items
-    .map(
-      ([k, label, ic]) =>
-        `<a class="${k === active ? "on" : ""}" href="${href(k)}"><span class="ic">${icon(ic)}</span><span class="lbl">${label}</span></a>`
-    )
-    .join("");
-  return `<div class="nav">${top}</div><nav class="tabbar">${bottom}</nav>`;
+// ── App shell (persistent sidebar on desktop, bottom bar on mobile) ───────────
+const NAV_ITEMS = [
+  ["bookings", "Bookings", "cal"],
+  ["past", "Past", "clock"],
+  ["followups", "Follow-ups", "gift"],
+  ["clients", "Clients", "users"],
+  ["leads", "Leads", "userplus"],
+  ["reviews", "Reviews", "star"],
+];
+const navHref = (k) => `/api/owner${k === "bookings" ? "" : `?view=${k}`}`;
+
+const BRAND_MARK = `<svg width="30" height="30" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#b0542e"/><circle cx="20" cy="21" r="10.5" fill="#fff"/><circle cx="16" cy="17" r="2" fill="#e8836b"/><circle cx="24" cy="16.5" r="2" fill="#5f8c6b"/><circle cx="25.5" cy="23" r="2" fill="#e2a33a"/><circle cx="17.5" cy="25.5" r="2" fill="#7a6cbf"/><circle cx="20" cy="21" r="2.4" fill="#f6f0e4"/></svg>`;
+
+function sideNav(active) {
+  const links = NAV_ITEMS.map(
+    ([k, label, ic]) => `<a class="${k === active ? "on" : ""}" href="${navHref(k)}"><span class="si">${icon(ic)}</span>${label}</a>`
+  ).join("");
+  return `<aside class="sidebar">
+    <div class="brand">${BRAND_MARK}<span class="bt">Face Painting<b>Dashboard</b></span></div>
+    <nav class="sidenav">${links}</nav>
+  </aside>`;
+}
+
+function tabBar(active) {
+  const links = NAV_ITEMS.map(
+    ([k, label, ic]) => `<a class="${k === active ? "on" : ""}" href="${navHref(k)}"><span class="ic">${icon(ic)}</span><span class="lbl">${label}</span></a>`
+  ).join("");
+  return `<nav class="tabbar">${links}</nav>`;
+}
+
+// Wraps a view's content in the consistent shell so every tab shares one frame.
+function appShell(active, content) {
+  return `<div class="shell">${sideNav(active)}<main class="content">${content}</main>${tabBar(active)}</div>`;
 }
 
 // A hidden POST form reduced to a single button (used for the one-off card actions).
@@ -612,15 +642,12 @@ function followupCard(f) {
 export function followupsPage(followups) {
   const list = followups.length
     ? followups.map(followupCard).join("")
-    : `<div class="empty">No birthdays coming up in the next few weeks.</div>`;
-  const body = `<div class="page">
-    ${navBar("followups")}
-    <h1>Follow-ups</h1>
-    <p class="sub">${followups.length} birthday${followups.length === 1 ? "" : "s"} coming up · ${esc(BIRTHDAY_DISCOUNT)} offer</p>
+    : `<div class="empty fullrow">No birthdays coming up in the next few weeks.</div>`;
+  const content = `
+    <div class="vhead"><div><h1>Follow-ups</h1><p class="sub">${followups.length} birthday${followups.length === 1 ? "" : "s"} coming up · ${esc(BIRTHDAY_DISCOUNT)} offer</p></div></div>
     <p class="hint">Text is the fastest way. Tap “Text” to open Messages with the note ready, or Copy it. Email is optional.</p>
-    <div class="a-list" style="margin-top:14px">${list}</div>
-  </div>`;
-  return shellPage("Follow-ups · Face Painting CA", body, DASHBOARD_SCRIPT);
+    <div class="cardgrid" style="margin-top:14px">${list}</div>`;
+  return shellPage("Follow-ups · Face Painting CA", appShell("followups", content), DASHBOARD_SCRIPT);
 }
 
 // Shared add/edit fields for a client or lead row.
@@ -679,10 +706,11 @@ function clientCard(c, base) {
   </div>`;
 }
 
-function addClientForm(action, view, label) {
-  const id = `add-${view}`;
-  return `<button class="btn btn-add" data-toggle="${id}">＋ ${label}</button>
-    <div id="${id}" class="drawer" hidden>
+function addClientButton(view, label) {
+  return `<button class="btn btn-add" data-toggle="add-${view}">＋ ${label}</button>`;
+}
+function addClientDrawer(action, view) {
+  return `<div id="add-${view}" class="drawer" hidden>
       <form method="POST" action="/api/owner" class="bform">
         <input type="hidden" name="action" value="${action}">
         <input type="hidden" name="view" value="${view}">
@@ -696,32 +724,30 @@ export function clientsPage(clients, base) {
   const sorted = [...clients].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   const rows = sorted.length
     ? sorted.map((c) => clientCard(c, base)).join("")
-    : `<div class="empty">No clients yet. Add the past clients you already know to start.</div>`;
-  const body = `<div class="page">
-    ${navBar("clients")}
-    <div class="headrow">
+    : `<div class="empty fullrow">No clients yet. Add the past clients you already know to start.</div>`;
+  const content = `
+    <div class="vhead">
       <div><h1>Clients</h1><p class="sub">${sorted.length} in your CRM</p></div>
+      ${addClientButton("clients", "Add client")}
     </div>
-    <div style="margin:6px 0 18px">${addClientForm("client-create", "clients", "Add client")}</div>
-    <div class="a-list">${rows}</div>
-  </div>`;
-  return shellPage("Clients · Face Painting CA", body, DASHBOARD_SCRIPT);
+    ${addClientDrawer("client-create", "clients")}
+    <div class="cardgrid">${rows}</div>`;
+  return shellPage("Clients · Face Painting CA", appShell("clients", content), DASHBOARD_SCRIPT);
 }
 
 export function leadsPage(leads) {
   const sorted = [...leads].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   const rows = sorted.length
     ? sorted.map(clientCard).join("")
-    : `<div class="empty">No leads yet. Sky saves people who chat but don't book, and you can add your own.</div>`;
-  const body = `<div class="page">
-    ${navBar("leads")}
-    <div class="headrow">
+    : `<div class="empty fullrow">No leads yet. Sky saves people who chat but don't book, and you can add your own.</div>`;
+  const content = `
+    <div class="vhead">
       <div><h1>Leads</h1><p class="sub">${sorted.length} to follow up</p></div>
+      ${addClientButton("leads", "Add lead")}
     </div>
-    <div style="margin:6px 0 18px">${addClientForm("lead-create", "leads", "Add lead")}</div>
-    <div class="a-list">${rows}</div>
-  </div>`;
-  return shellPage("Leads · Face Painting CA", body, DASHBOARD_SCRIPT);
+    ${addClientDrawer("lead-create", "leads")}
+    <div class="cardgrid">${rows}</div>`;
+  return shellPage("Leads · Face Painting CA", appShell("leads", content), DASHBOARD_SCRIPT);
 }
 
 // ── Past events ───────────────────────────────────────────────────────────────
@@ -786,14 +812,12 @@ export function pastPage(past, base) {
     }
     list += pastCard(b, base);
   }
-  if (!past.length) list = `<div class="empty">No past events yet.</div>`;
-  const body = `<div class="page">
-    ${navBar("past")}
-    <div class="headrow"><div><h1>Past events</h1><p class="sub">${past.length} completed</p></div></div>
+  if (!past.length) list = `<div class="empty fullrow">No past events yet.</div>`;
+  const content = `
+    <div class="vhead"><div><h1>Past events</h1><p class="sub">${past.length} completed</p></div></div>
     <p class="hint">Events automatically move here once their time has passed. Tap Rebook to set up a repeat.</p>
-    <div class="a-list" style="margin-top:14px">${list}</div>
-  </div>`;
-  return shellPage("Past · Face Painting CA", body, DASHBOARD_SCRIPT);
+    <div class="cardgrid" style="margin-top:14px">${list}</div>`;
+  return shellPage("Past · Face Painting CA", appShell("past", content), DASHBOARD_SCRIPT);
 }
 
 // ── Reviews (moderation) ──────────────────────────────────────────────────────
@@ -822,7 +846,7 @@ export function reviewsPage(reviews, base) {
   const pending = reviews.filter((r) => r.status !== "approved" && r.status !== "rejected");
   const approved = reviews.filter((r) => r.status === "approved");
   const shareLink = `${base || ""}/review`;
-  const linkBox = `<div class="card" style="margin-bottom:16px">
+  const linkBox = `<div class="card fullrow">
       <div class="cname" style="font-size:16px">📣 Your review link</div>
       <p class="crmeta" style="margin-top:4px">Share this with clients to collect reviews — it opens your review form.</p>
       <div class="cactions" style="margin-top:12px">
@@ -832,17 +856,17 @@ export function reviewsPage(reviews, base) {
         <a class="btn btn-text" href="sms:?&body=${encodeURIComponent(`We'd love a quick review! ${shareLink}`)}">💬 Text it</a>
       </div>
     </div>`;
-  const body = `<div class="page">
-    ${navBar("reviews")}
-    <div class="headrow"><div><h1>Reviews</h1><p class="sub">${pending.length} pending · ${approved.length} live on your site</p></div></div>
+  const content = `
+    <div class="vhead"><div><h1>Reviews</h1><p class="sub">${pending.length} pending · ${approved.length} live on your site</p></div></div>
     <p class="hint">Approve the ones you want public. Approved reviews show on your website. For a link personalized to one client, use “Ask for review” on the Clients or Past tab.</p>
-    ${linkBox}
-    <div class="sec">Pending</div>
-    ${pending.length ? pending.map(reviewCard).join("") : `<div class="empty">No new reviews.</div>`}
-    <div class="sec">Live on your site</div>
-    ${approved.length ? approved.map(reviewCard).join("") : `<div class="empty">No approved reviews yet.</div>`}
-  </div>`;
-  return shellPage("Reviews · Face Painting CA", body, DASHBOARD_SCRIPT);
+    <div class="cardgrid">
+      ${linkBox}
+      <div class="sec">Pending</div>
+      ${pending.length ? pending.map(reviewCard).join("") : `<div class="empty fullrow">No new reviews.</div>`}
+      <div class="sec">Live on your site</div>
+      ${approved.length ? approved.map(reviewCard).join("") : `<div class="empty fullrow">No approved reviews yet.</div>`}
+    </div>`;
+  return shellPage("Reviews · Face Painting CA", appShell("reviews", content), DASHBOARD_SCRIPT);
 }
 
 export function dashboardPage(bookings, ym) {
@@ -870,22 +894,20 @@ export function dashboardPage(bookings, ym) {
     ? `<div class="sec">Reschedule Requests</div>${requests.map(bookingCard).join("")}`
     : "";
 
-  const body = `<div class="app">
-    <div class="a-head">
-      ${navBar("bookings")}
-      <div class="a-head-row">
-        <div>
-          <h1>Bookings</h1>
-          <p class="sub">${upcoming.length} upcoming · ${requests.length} reschedule request${requests.length === 1 ? "" : "s"}</p>
-        </div>
-        ${addEventButton()}
+  const content = `
+    <div class="vhead">
+      <div>
+        <h1>Bookings</h1>
+        <p class="sub">${upcoming.length} upcoming · ${requests.length} reschedule request${requests.length === 1 ? "" : "s"}</p>
       </div>
+      ${addEventButton()}
     </div>
-    <div class="a-add">${addEventDrawer()}</div>
-    <div class="a-cal">${calendarPanel(bookings, month)}</div>
-    <div class="a-list">${requestsHtml}${list}</div>
-  </div>`;
-  return shellPage("Bookings · Face Painting CA", body, DASHBOARD_SCRIPT);
+    ${addEventDrawer()}
+    <div class="bkgrid">
+      <div class="bklist">${requestsHtml}${list}</div>
+      <div class="bkcal">${calendarPanel(bookings, month)}</div>
+    </div>`;
+  return shellPage("Bookings · Face Painting CA", appShell("bookings", content), DASHBOARD_SCRIPT);
 }
 
 // Performs a create/edit action from the dashboard, then mirrors the result to
