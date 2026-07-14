@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import butterflyImg from '../assets/designs/butterfly.jpg';
 import tigerImg from '../assets/designs/tiger.jpg';
@@ -10,20 +10,37 @@ import skullImg from '../assets/designs/skull-art.jpg';
 import birthdayImg from '../assets/designs/birthday.jpg';
 import setupImg from '../assets/designs/setup.jpg';
 
-const galleryImages = [
-  { src: butterflyImg, alt: 'Butterfly face paint', label: 'butterfly face design' },
-  { src: tigerImg, alt: 'Tiger face paint', label: 'tiger face design' },
-  { src: princessImg, alt: 'Princess face paint', label: 'mermaid face design' },
-  { src: rainbowImg, alt: 'Rainbow face paint', label: 'rainbow face design' },
-  { src: unicornImg, alt: 'Unicorn face paint', label: 'unicorn face design' },
-  { src: superheroImg, alt: 'Superhero face paint', label: 'spiderman face design' },
-  { src: skullImg, alt: 'Skull art face paint', label: 'skeleton face design' },
-  { src: birthdayImg, alt: 'Birthday party face painting', label: 'fairy face design' },
-  { src: setupImg, alt: 'Face painting setup', label: 'paint kit photo' },
+// Shown until (and unless) owner-uploaded photos load from the dashboard.
+const fallbackImages = [
+  { src: butterflyImg, alt: 'Butterfly face paint' },
+  { src: tigerImg, alt: 'Tiger face paint' },
+  { src: princessImg, alt: 'Princess face paint' },
+  { src: rainbowImg, alt: 'Rainbow face paint' },
+  { src: unicornImg, alt: 'Unicorn face paint' },
+  { src: superheroImg, alt: 'Superhero face paint' },
+  { src: skullImg, alt: 'Skull art face paint' },
+  { src: birthdayImg, alt: 'Birthday party face painting' },
+  { src: setupImg, alt: 'Face painting setup' },
 ];
 
 export default function Gallery() {
   const [lightboxImg, setLightboxImg] = useState(null);
+  const [galleryImages, setGalleryImages] = useState(fallbackImages);
+
+  // Load owner-uploaded photos; keep the built-in ones if none/failed.
+  useEffect(() => {
+    let active = true;
+    fetch('/api/owner?public=gallery')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        if (!active || !Array.isArray(data) || data.length === 0) return;
+        setGalleryImages(data.map((g) => ({ src: g.url, alt: g.alt || 'Face painting' })));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <section id="gallery" className="relative py-14 sm:py-24 bg-cream overflow-hidden">

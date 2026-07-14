@@ -1,6 +1,14 @@
 import crypto from "crypto";
 import { listCalendarBookings, createOwnerBooking, updateBooking } from "./_lib/book.js";
-import { syncBookingsToSheet, getBookingsFromSheet, getReviews, setReviewStatus } from "./_lib/sheets.js";
+import {
+  syncBookingsToSheet,
+  getBookingsFromSheet,
+  getReviews,
+  setReviewStatus,
+  getGallery,
+  addGalleryImage,
+  removeGalleryImage,
+} from "./_lib/sheets.js";
 import { fmtTimeRange, birthdayPromoHtml, sendEmail } from "./_lib/email.js";
 import {
   getClients,
@@ -201,6 +209,13 @@ const STYLE = `
   .cardgrid{display:grid;grid-template-columns:1fr;gap:14px;align-items:start}
   @media(min-width:760px){ .cardgrid{grid-template-columns:repeat(auto-fill,minmax(320px,1fr))} }
   .cardgrid > .sec,.cardgrid > .fullrow{grid-column:1/-1}
+
+  /* Gallery manager */
+  .galgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+  .galcard{position:relative;border-radius:14px;overflow:hidden;background:#fff;border:1px solid #efe6d6}
+  .galcard img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover}
+  .galcard form{position:absolute;top:8px;right:8px;margin:0}
+  .galcard .btn{padding:6px 12px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.18)}
 
   /* Mobile app-style bottom tab bar */
   .tabbar{display:none}
@@ -550,6 +565,7 @@ function icon(name) {
     users: `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>`,
     userplus: `<path d="M15 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/>`,
     star: `<path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.6 1.1 6.45L12 17.9l-5.8 3 1.1-6.45-4.7-4.6 6.5-.95L12 2.5z"/>`,
+    image: `<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>`,
   }[name] || "";
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
 }
@@ -562,6 +578,7 @@ const NAV_ITEMS = [
   ["clients", "Clients", "users"],
   ["leads", "Leads", "userplus"],
   ["reviews", "Reviews", "star"],
+  ["gallery", "Gallery", "image"],
 ];
 const navHref = (k) => `/api/owner${k === "bookings" ? "" : `?view=${k}`}`;
 
@@ -869,6 +886,66 @@ export function reviewsPage(reviews, base) {
   return shellPage("Reviews · Face Painting CA", appShell("reviews", content), DASHBOARD_SCRIPT);
 }
 
+// Client-side resize (keeps uploads small + fast) then POST the image bytes.
+const GALLERY_SCRIPT = `<script>
+(function(){
+  var inp=document.getElementById('galup'); if(!inp) return;
+  var status=document.getElementById('galstatus');
+  function resize(file){
+    return new Promise(function(res,rej){
+      var img=new Image(), url=URL.createObjectURL(file);
+      img.onload=function(){
+        var max=1600,w=img.width,h=img.height;
+        if(w>max||h>max){ if(w>h){h=Math.round(h*max/w);w=max;} else {w=Math.round(w*max/h);h=max;} }
+        var c=document.createElement('canvas'); c.width=w; c.height=h;
+        c.getContext('2d').drawImage(img,0,0,w,h);
+        URL.revokeObjectURL(url);
+        c.toBlob(function(b){ b?res(b):rej(new Error('encode failed')); },'image/jpeg',0.85);
+      };
+      img.onerror=function(){ URL.revokeObjectURL(url); rej(new Error('not an image')); };
+      img.src=url;
+    });
+  }
+  inp.addEventListener('change', async function(){
+    var files=Array.prototype.slice.call(inp.files||[]); if(!files.length) return;
+    for(var i=0;i<files.length;i++){
+      status.textContent='Uploading '+(i+1)+' of '+files.length+'…';
+      try{
+        var blob=await resize(files[i]);
+        var name=((files[i].name||'photo').replace(/\\.[^.]+$/,''))+'.jpg';
+        var r=await fetch('/api/owner?action=gallery-upload&filename='+encodeURIComponent(name),{method:'POST',headers:{'content-type':'image/jpeg'},body:blob});
+        if(!r.ok){ status.textContent='Upload failed: '+(await r.text()).slice(0,140); return; }
+      }catch(e){ status.textContent='Upload failed: '+e.message; return; }
+    }
+    status.textContent='Done! Refreshing…';
+    location.reload();
+  });
+})();
+</script>`;
+
+function galleryImageCard(g) {
+  return `<div class="galcard">
+    <img src="${esc(g.url)}" alt="${esc(g.alt)}" loading="lazy">
+    ${actionForm("gallery-remove", g.id, "gallery", "Remove", "btn btn-cancel")}
+  </div>`;
+}
+
+export function galleryPage(gallery) {
+  const grid = gallery.length
+    ? gallery.map(galleryImageCard).join("")
+    : `<div class="empty fullrow">No photos yet — add your first with “Add photos”.</div>`;
+  const content = `
+    <div class="vhead">
+      <div><h1>Gallery</h1><p class="sub">${gallery.length} photo${gallery.length === 1 ? "" : "s"} on your website</p></div>
+      <label class="btn btn-add" for="galup">＋ Add photos</label>
+    </div>
+    <input type="file" id="galup" accept="image/*" multiple hidden>
+    <div id="galstatus" class="hint"></div>
+    <p class="hint">Photos show in your public site's gallery. Uploads are resized automatically; tap Remove to take one down. (If uploads say storage isn't set up, enable Blob in Vercel → Storage.)</p>
+    <div class="galgrid">${grid}</div>`;
+  return shellPage("Gallery · Face Painting CA", appShell("gallery", content), DASHBOARD_SCRIPT + GALLERY_SCRIPT);
+}
+
 export function dashboardPage(bookings, ym) {
   const today = todayPacific();
   const month = /^\d{4}-\d{2}$/.test(ym || "") ? ym : today.slice(0, 7);
@@ -962,6 +1039,13 @@ async function handleAction(body, base) {
     return;
   }
 
+  // ── Gallery: remove a photo ────────────────────────────────────────────────
+  if (body.action === "gallery-remove") {
+    const id = (body.key || "").trim();
+    if (id) await removeGalleryImage(id);
+    return;
+  }
+
   // ── Booking create / edit (Calendar) ───────────────────────────────────────
   const d = {
     clientName: (body.clientName || "").trim(),
@@ -1001,6 +1085,59 @@ export default async function handler(req, res) {
     res.end(body);
   };
 
+  const url0 = new URL(req.url, "http://localhost");
+
+  // Public gallery feed for the marketing site (no auth — images are public).
+  if (req.method === "GET" && url0.searchParams.get("public") === "gallery") {
+    try {
+      const imgs = await getGallery();
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Cache-Control", "public, max-age=120");
+      return res.end(JSON.stringify(imgs.map((g) => ({ url: g.url, alt: g.alt }))));
+    } catch (e) {
+      console.error("Gallery feed error:", e);
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      return res.end("[]");
+    }
+  }
+
+  // Gallery photo upload: raw (resized) image body, owner cookie required.
+  if (req.method === "POST" && url0.searchParams.get("action") === "gallery-upload") {
+    if (!isAuthed(req)) {
+      res.statusCode = 403;
+      return res.end("Not authorized");
+    }
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      res.statusCode = 503;
+      return res.end("Photo storage isn't set up yet. Enable Blob in Vercel (Storage → Blob), then try again.");
+    }
+    try {
+      const chunks = [];
+      for await (const c of req) chunks.push(c);
+      const buffer = Buffer.concat(chunks);
+      if (!buffer.length) {
+        res.statusCode = 400;
+        return res.end("Empty upload.");
+      }
+      const filename = (url0.searchParams.get("filename") || "photo.jpg").replace(/[^\w.\-]/g, "_");
+      const { put } = await import("@vercel/blob");
+      const blob = await put(`gallery/${Date.now()}-${filename}`, buffer, {
+        access: "public",
+        contentType: req.headers["content-type"] || "image/jpeg",
+      });
+      await addGalleryImage({ url: blob.url, alt: "" });
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "application/json");
+      return res.end(JSON.stringify({ url: blob.url }));
+    } catch (e) {
+      console.error("Gallery upload error:", e);
+      res.statusCode = 500;
+      return res.end("Upload failed. Please try again.");
+    }
+  }
+
   if (!OWNER_PASSWORD) {
     return html(503, shellPage("Setup needed", `<div class="login"><h1>Setup needed</h1><p class="sub">Set the <code>OWNER_DASHBOARD_PASSWORD</code> environment variable to enable this page.</p></div>`));
   }
@@ -1024,7 +1161,7 @@ export default async function handler(req, res) {
         console.error("Owner action error:", error);
       }
       // Redirect so a refresh doesn't resubmit the form; return to the same view.
-      const view = /^(followups|clients|leads|past|reviews)$/.test(body.view || "") ? `?view=${body.view}` : "";
+      const view = /^(followups|clients|leads|past|reviews|gallery)$/.test(body.view || "") ? `?view=${body.view}` : "";
       res.statusCode = 303;
       res.setHeader("Location", `/api/owner${view}`);
       return res.end();
@@ -1046,6 +1183,9 @@ export default async function handler(req, res) {
     const proto = req.headers["x-forwarded-proto"] || (String(req.headers.host || "").includes("localhost") ? "http" : "https");
     const base = process.env.APP_BASE_URL || `${proto}://${req.headers.host}`;
 
+    if (view === "gallery") {
+      return html(200, galleryPage(await getGallery()));
+    }
     if (view === "reviews") {
       return html(200, reviewsPage(await getReviews(), base));
     }

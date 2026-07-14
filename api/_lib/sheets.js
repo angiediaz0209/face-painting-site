@@ -538,3 +538,80 @@ export async function setReviewStatus(id, status) {
     }
   }
 }
+
+// ── Gallery tab ───────────────────────────────────────────────────────────────
+// Owner-uploaded website photos. Files live on Vercel Blob; this tab just holds
+// the public URL + caption + ordering so the marketing site can render them.
+const GALLERY_HEADERS = ["ID", "URL", "Alt", "Added"];
+const GALLERY_RANGE = "Gallery!A:D";
+
+async function ensureGallerySheet(sheets, sheetId) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId, fields: "sheets.properties.title" });
+  const exists = (meta.data.sheets || []).some((s) => s.properties?.title === "Gallery");
+  if (!exists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: sheetId,
+      requestBody: { requests: [{ addSheet: { properties: { title: "Gallery" } } }] },
+    });
+  }
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: "Gallery!A1:D1" });
+  const current = res.data.values?.[0] || [];
+  if (current.join("|") !== GALLERY_HEADERS.join("|")) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: sheetId,
+      range: "Gallery!A1:D1",
+      valueInputOption: "RAW",
+      requestBody: { values: [GALLERY_HEADERS] },
+    });
+  }
+}
+
+export async function getGallery() {
+  const client = getSheetsClient();
+  if (!client) return [];
+  const { sheets, sheetId } = client;
+  await ensureGallerySheet(sheets, sheetId);
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: GALLERY_RANGE });
+  const rows = res.data.values || [];
+  return rows
+    .slice(1)
+    .map((c, i) => ({ rowNumber: i + 2, id: (c[0] || "").trim(), url: (c[1] || "").trim(), alt: (c[2] || "").trim(), added: (c[3] || "").trim() }))
+    .filter((g) => g.id && g.url);
+}
+
+/** Appends an uploaded image (public Blob URL + caption). Returns its id. */
+export async function addGalleryImage({ url, alt }) {
+  const client = getSheetsClient();
+  if (!client) return null;
+  const { sheets, sheetId } = client;
+  await ensureGallerySheet(sheets, sheetId);
+  const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: sheetId,
+    range: GALLERY_RANGE,
+    valueInputOption: "RAW",
+    insertDataOption: "INSERT_ROWS",
+    requestBody: { values: [[id, url, alt || "", nowStamp()]] },
+  });
+  return id;
+}
+
+/** Removes a gallery row by ID (clears the row so ordering stays stable). */
+export async function removeGalleryImage(id) {
+  const client = getSheetsClient();
+  if (!client) return;
+  const { sheets, sheetId } = client;
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: GALLERY_RANGE });
+  const rows = res.data.values || [];
+  for (let i = 1; i < rows.length; i++) {
+    if ((rows[i][0] || "").trim() === id) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: sheetId,
+        range: `Gallery!A${i + 1}:D${i + 1}`,
+        valueInputOption: "RAW",
+        requestBody: { values: [["", "", "", ""]] },
+      });
+      return;
+    }
+  }
+}
