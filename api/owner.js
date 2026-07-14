@@ -187,10 +187,10 @@ const STYLE = `
       padding:7px 2px calc(7px + env(safe-area-inset-bottom))}
     .tabbar a{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;
       text-decoration:none;color:#a29a8b;font-size:9.5px;font-weight:700;padding:3px 1px}
-    .tabbar a .ic{font-size:20px;line-height:1}
+    .tabbar a .ic{line-height:0}
+    .tabbar a .ic svg{width:23px;height:23px;display:block}
     .tabbar a span.lbl{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .tabbar a.on{color:#b0542e}
-    .tabbar a.on .ic{transform:translateY(-1px)}
     /* leave room above the fixed bar + notch */
     .app,.page{padding-bottom:calc(84px + env(safe-area-inset-bottom))!important}
     .app{padding-top:calc(6px + env(safe-area-inset-top))}
@@ -228,7 +228,8 @@ function shellPage(title, body, script = "") {
     <meta name="apple-mobile-web-app-title" content="Bookings">
     <meta name="theme-color" content="#f6f0e4">
     <meta name="format-detection" content="telephone=no">
-    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%23b0542e'/%3E%3Ctext x='90' y='128' font-size='104' text-anchor='middle'%3E%F0%9F%8E%A8%3C/text%3E%3C/svg%3E">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2240%22%20fill%3D%22%23b0542e%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%2246%22%20fill%3D%22%23fff%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2279%22%20r%3D%227.5%22%20fill%3D%22%23e8836b%22%2F%3E%3Ccircle%20cx%3D%22107%22%20cy%3D%2277%22%20r%3D%227.5%22%20fill%3D%22%235f8c6b%22%2F%3E%3Ccircle%20cx%3D%22115%22%20cy%3D%22103%22%20r%3D%227.5%22%20fill%3D%22%23e2a33a%22%2F%3E%3Ccircle%20cx%3D%2280%22%20cy%3D%22113%22%20r%3D%227.5%22%20fill%3D%22%237a6cbf%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%229%22%20fill%3D%22%23f6f0e4%22%2F%3E%3C%2Fsvg%3E">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2240%22%20fill%3D%22%23b0542e%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%2246%22%20fill%3D%22%23fff%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2279%22%20r%3D%227.5%22%20fill%3D%22%23e8836b%22%2F%3E%3Ccircle%20cx%3D%22107%22%20cy%3D%2277%22%20r%3D%227.5%22%20fill%3D%22%235f8c6b%22%2F%3E%3Ccircle%20cx%3D%22115%22%20cy%3D%22103%22%20r%3D%227.5%22%20fill%3D%22%23e2a33a%22%2F%3E%3Ccircle%20cx%3D%2280%22%20cy%3D%22113%22%20r%3D%227.5%22%20fill%3D%22%237a6cbf%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%229%22%20fill%3D%22%23f6f0e4%22%2F%3E%3C%2Fsvg%3E">
     <title>${title}</title><style>${STYLE}</style>`;
   return `<!doctype html><html><head>${head}</head><body>${body}${script}</body></html>`;
 }
@@ -521,16 +522,29 @@ const DASHBOARD_SCRIPT = `<script>
 })();
 </script>`;
 
+// Minimal single-color line icons (Feather-style, inherit currentColor).
+function icon(name) {
+  const p = {
+    cal: `<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/>`,
+    clock: `<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>`,
+    gift: `<path d="M20 12v10H4V12"/><rect x="2" y="7" width="20" height="5" rx="1"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>`,
+    users: `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>`,
+    userplus: `<path d="M15 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/>`,
+    star: `<path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.6 1.1 6.45L12 17.9l-5.8 3 1.1-6.45-4.7-4.6 6.5-.95L12 2.5z"/>`,
+  }[name] || "";
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+}
+
 // ── CRM views (Follow-ups / Clients / Leads) ─────────────────────────────────
 // Desktop shows pill tabs at the top; mobile gets an app-style fixed bottom bar.
 function navBar(active) {
   const items = [
-    ["bookings", "Bookings", "📅"],
-    ["past", "Past", "🕘"],
-    ["followups", "Follow-ups", "🎂"],
-    ["clients", "Clients", "👥"],
-    ["leads", "Leads", "🌱"],
-    ["reviews", "Reviews", "⭐"],
+    ["bookings", "Bookings", "cal"],
+    ["past", "Past", "clock"],
+    ["followups", "Follow-ups", "gift"],
+    ["clients", "Clients", "users"],
+    ["leads", "Leads", "userplus"],
+    ["reviews", "Reviews", "star"],
   ];
   const href = (k) => `/api/owner${k === "bookings" ? "" : `?view=${k}`}`;
   const top = items
@@ -539,7 +553,7 @@ function navBar(active) {
   const bottom = items
     .map(
       ([k, label, ic]) =>
-        `<a class="${k === active ? "on" : ""}" href="${href(k)}"><span class="ic">${ic}</span><span class="lbl">${label}</span></a>`
+        `<a class="${k === active ? "on" : ""}" href="${href(k)}"><span class="ic">${icon(ic)}</span><span class="lbl">${label}</span></a>`
     )
     .join("");
   return `<div class="nav">${top}</div><nav class="tabbar">${bottom}</nav>`;
