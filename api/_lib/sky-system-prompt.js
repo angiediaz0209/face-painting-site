@@ -23,7 +23,7 @@ function loadSkyInstructions() {
 
 const skyInstructions = loadSkyInstructions();
 
-export default function getSkySystemPrompt() {
+export default function getSkySystemPrompt({ secondArtistAvailable = false } = {}) {
   // Get current date/time in Pacific Time reliably
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Los_Angeles',
@@ -43,7 +43,19 @@ export default function getSkySystemPrompt() {
   });
   const isoDate = isoFormatter.format(new Date()); // YYYY-MM-DD format
 
+  // Owner-controlled, from the Settings tab. Sky must never sell a second
+  // artist when there isn't one to send.
+  const secondArtistBlock = secondArtistAvailable
+    ? `SECOND ARTIST: AVAILABLE today. You may recommend a second artist as described in your instructions.`
+    : `SECOND ARTIST: NOT AVAILABLE right now. There is currently only one artist.
+- Never recommend, offer, or mention a second artist on your own.
+- Never show a price card that includes a second artist.
+- For large groups, recommend more hours instead, and be honest that in one hour a single artist gets through about 10 to 12 children with quick designs.
+- If the CLIENT asks for a second artist, do not say no and do not promise one. Say the team will check whether a second artist can be arranged for their date, and record it in secondArtistRequested when you show the details form. Then carry on with the booking.`;
+
   return `TODAY'S DATE: ${dateStr} (${isoDate})
+
+${secondArtistBlock}
 
 IMPORTANT: Today is ${dateStr}. The current year is ${new Date().getFullYear()}. When a client mentions a date like "this Saturday" or "next Friday", interpret it relative to today's date above. All bookings MUST be in the future — never create a booking for a past date. If the client says a date that has already passed, gently clarify: "Did you mean [next occurrence]?" Always assume clients are booking for the nearest upcoming date unless they specify otherwise. When using tools, dates must be in YYYY-MM-DD format and must be on or after ${isoDate}.
 

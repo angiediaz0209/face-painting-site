@@ -45,6 +45,55 @@ export async function checkAvailability({ date }) {
   };
 }
 
+/**
+ * Busy dates in a range, for the booking form's date picker.
+ *
+ * Returns ONLY an array of YYYY-MM-DD strings. This is called from a public
+ * endpoint, so it must never leak event titles, client names, or locations —
+ * just which days are taken.
+ *
+ * A day with any event on it counts as busy, matching how checkAvailability
+ * treats conflicts for Sky. Someone who really wants a taken day can still ask
+ * by text.
+ */
+export async function listBusyDates({ from, to }) {
+  const auth = getAuthClient();
+  const calendarId = process.env.GOOGLE_CALENDAR_ID;
+  const calendar = google.calendar({ version: 'v3', auth });
+
+  const result = await calendar.events.list({
+    calendarId,
+    timeMin: `${from}T00:00:00-08:00`,
+    timeMax: `${to}T23:59:59-08:00`,
+    singleEvents: true,
+    orderBy: 'startTime',
+    maxResults: 2500,
+  });
+
+  const busy = new Set();
+  for (const e of result.data.items || []) {
+    const startRaw = e.start?.dateTime || e.start?.date;
+    if (!startRaw) continue;
+    const endRaw = e.end?.dateTime || e.end?.date || startRaw;
+
+    // Walk every day the event covers, so multi-day events block each of them.
+    const startDay = toPacificDate(startRaw);
+    const endDay = toPacificDate(endRaw);
+    let cursor = new Date(`${startDay}T12:00:00`);
+    const last = new Date(`${endDay}T12:00:00`);
+    // All-day events use an EXCLUSIVE end date, so the last day they actually
+    // cover is the day before. Timed events end on the day they end.
+    if (e.start?.date && !e.start?.dateTime) last.setDate(last.getDate() - 1);
+    let guard = 0;
+    while (cursor <= last && guard++ < 400) {
+      busy.add(toPacificDate(cursor.toISOString()));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  }
+
+  return [...busy].sort();
+}
+
 // Format an ISO datetime (or all-day date) into Pacific-time YYYY-MM-DD.
 function toPacificDate(iso) {
   return new Intl.DateTimeFormat('en-CA', {
@@ -152,6 +201,40 @@ export async function listCalendarBookings() {
   return (result.data.items || [])
     .map(parseEventToBooking)
     .filter(Boolean);
+}
+
+/**
+ * Looks for a booking that already exists for this phone (or email) on this
+ * date, so a client who submits the form twice — or who booked with Sky and
+ * then used the form — doesn't end up with two events on your calendar.
+ * Returns the existing booking, or null.
+ */
+export async function findDuplicateBooking({ phone, email, date }) {
+  const auth = getAuthClient();
+  const calendarId = process.env.GOOGLE_CALENDAR_ID;
+  const calendar = google.calendar({ version: 'v3', auth });
+
+  const result = await calendar.events.list({
+    calendarId,
+    timeMin: `${date}T00:00:00-08:00`,
+    timeMax: `${date}T23:59:59-08:00`,
+    singleEvents: true,
+    orderBy: 'startTime',
+  });
+
+  const digits = (p) => String(p || '').replace(/\D/g, '').slice(-10);
+  const wantPhone = digits(phone);
+  const wantEmail = String(email || '').trim().toLowerCase();
+
+  for (const event of result.data.items || []) {
+    const booking = parseEventToBooking(event);
+    if (!booking) continue;
+    const samePhone = wantPhone && digits(booking.phone) === wantPhone;
+    const sameEmail =
+      wantEmail && String(booking.email || '').trim().toLowerCase() === wantEmail;
+    if (samePhone || sameEmail) return booking;
+  }
+  return null;
 }
 
 /**
@@ -537,6 +620,23 @@ export async function updateBooking(eventId, d) {
  * Creates a Google Calendar event for a face painting booking.
  * If pending=true, creates a [PENDING] event with orange color and no invite.
  */
+/**
+ * A big group squeezed into a single hour means the artist must plan smaller,
+ * quicker designs. Sky is unreliable about noting this herself and it's fully
+ * derivable from the booking, so work it out rather than asking her.
+ * Returns '' when it doesn't apply.
+ */
+export function artistPrepNote({ startTime, endTime, guestCount }) {
+  const s = /^(\d{1,2}):(\d{2})$/.exec(String(startTime || ''));
+  const e = /^(\d{1,2}):(\d{2})$/.exec(String(endTime || ''));
+  if (!s || !e) return '';
+  const hours = (+e[1] + +e[2] / 60) - (+s[1] + +s[2] / 60);
+  const bigGroup = /13-22|23\+/.test(String(guestCount || ''));
+  return hours > 0 && hours <= 1 && bigGroup
+    ? 'Large group in a single hour, plan smaller and quicker designs.'
+    : '';
+}
+
 export async function createBooking(bookingData) {
   const {
     clientName,
@@ -551,7 +651,35 @@ export async function createBooking(bookingData) {
     quote,
     notes,
     pending,
+    // Which surface created this booking, for the calendar note and so the
+    // owner can see which path converts. Defaults to Sky, so her existing flow
+    // in api/chat.js is completely unchanged.
+    source = 'sky',
+    // Context for the artist to prep with: who the party is for, whether it's
+    // kids or adults, the company and occasion for corporate, plus anything the
+    // client volunteered. All optional — omitted fields simply don't appear.
+    details = {},
   } = bookingData;
+
+  const artistNotes = [details.specialRequests, artistPrepNote({ startTime, endTime, guestCount })]
+    .filter(Boolean)
+    .join(' · ');
+
+  // Each becomes its own line in the calendar event, so the artist can scan it
+  // rather than dig through a paragraph of notes.
+  const detailLines = [
+    details.honoree ? `Birthday star: ${details.honoree}` : '',
+    details.companyName ? `Company: ${details.companyName}` : '',
+    details.occasion ? `Occasion: ${details.occasion}` : '',
+    details.guestMix ? `Guest mix: ${details.guestMix}` : '',
+    artistNotes ? `Special requests: ${artistNotes}` : '',
+    details.customRequest
+      ? `⚠️ CUSTOM DESIGN REQUEST: ${details.customRequest} — discuss with the client before the event`
+      : '',
+    details.secondArtistRequested
+      ? `⚠️ WANTED A SECOND ARTIST: ${details.secondArtistRequested} — see if one can be arranged`
+      : '',
+  ].filter(Boolean);
 
   const auth = getAuthClient();
   const calendarId = process.env.GOOGLE_CALENDAR_ID;
@@ -577,9 +705,14 @@ export async function createBooking(bookingData) {
       `Guests: ${guestCount}`,
       `Location: ${location}`,
       `Quote: ${quote}`,
+      ...detailLines,
       notes ? `Notes: ${notes}` : '',
       '',
-      "Booked by Sky, Face Painting California's assistant",
+      source === 'form'
+        ? 'Booked through the website booking form'
+        : source === 'chat'
+        ? 'Booked in the chat with Sky (client filled the details form)'
+        : "Booked by Sky, Face Painting California's assistant",
     ]
       .filter(Boolean)
       .join('\n'),

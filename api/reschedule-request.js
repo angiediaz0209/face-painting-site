@@ -1,18 +1,10 @@
-import crypto from "crypto";
 import { requestReschedule } from "./_lib/book.js";
 import { setBookingStatus } from "./_lib/sheets.js";
 import { sendRescheduleRequestNotification } from "./_lib/notify.js";
+import { clientToken, verifyToken } from "./_lib/tokens.js";
 
-// Same token scheme as the rest of the booking links.
-const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
-
-function expectedToken(eventId) {
-  return crypto
-    .createHmac("sha256", CONFIRM_SECRET)
-    .update(eventId)
-    .digest("hex")
-    .slice(0, 32);
-}
+// The client submits this from their own status page, so it takes a CLIENT
+// token. It only asks for a new date; the team still has to approve it.
 
 function page(body) {
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>Face Painting California</title></head>
@@ -66,11 +58,7 @@ export default async function handler(req, res) {
     return send(400, "<h2>Invalid date</h2><p>Please choose a valid date.</p>");
   }
 
-  const expected = expectedToken(eventId);
-  const ok =
-    token.length === expected.length &&
-    crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected));
-  if (!ok) {
+  if (!verifyToken(token, clientToken(eventId))) {
     return send(403, "<h2>Invalid link</h2><p>This request link isn't valid.</p>");
   }
 

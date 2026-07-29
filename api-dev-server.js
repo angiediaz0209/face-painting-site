@@ -1,7 +1,8 @@
+// MUST be first: populates process.env before the api/ modules below are
+// evaluated, since several of them read env vars at module scope.
+import './api-dev-env.js';
+
 import http from 'http';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import handler from './api/chat.js';
 import syncHandler from './api/sync.js';
 import confirmHandler from './api/confirm.js';
@@ -13,25 +14,7 @@ import rescheduleDeclineHandler from './api/reschedule-decline.js';
 import ownerHandler from './api/owner.js';
 import rescheduleManualHandler from './api/reschedule-manual.js';
 import reviewHandler from './api/review.js';
-
-// Load .env.local into process.env
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const envPath = path.join(__dirname, '.env.local');
-if (fs.existsSync(envPath)) {
-  const envContent = fs.readFileSync(envPath, 'utf-8');
-  for (const line of envContent.split('\n')) {
-    const trimmed = line.trim();
-    if (trimmed && !trimmed.startsWith('#')) {
-      const eqIndex = trimmed.indexOf('=');
-      if (eqIndex > 0) {
-        const key = trimmed.slice(0, eqIndex).trim();
-        const value = trimmed.slice(eqIndex + 1).trim();
-        process.env[key] = value;
-      }
-    }
-  }
-  console.log('Loaded .env.local');
-}
+import bookingHandler from './api/booking.js';
 
 const PORT = 3001;
 
@@ -97,6 +80,10 @@ const server = http.createServer((req, res) => {
   } else if (req.url.startsWith('/api/owner')) {
     // Password-gated owner dashboard (GET list / POST login).
     ownerHandler(req, res);
+  } else if (req.url.startsWith('/api/booking')) {
+    // Website booking form: availability (GET) and submit (POST). The handler
+    // reads its own body, so don't pre-parse it here.
+    bookingHandler(req, res);
   } else if (req.url.startsWith('/api/review')) {
     // Public review form (GET), approved-list JSON (GET ?list=1), submit (POST).
     reviewHandler(req, res);

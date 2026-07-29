@@ -1,17 +1,9 @@
-import crypto from "crypto";
 import { clearReschedule } from "./_lib/book.js";
 import { setBookingStatus } from "./_lib/sheets.js";
 import { sendEmail, rescheduleKeptHtml } from "./_lib/email.js";
+import { ownerToken, verifyToken } from "./_lib/tokens.js";
 
-const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
-
-function expectedToken(eventId) {
-  return crypto
-    .createHmac("sha256", CONFIRM_SECRET)
-    .update(eventId)
-    .digest("hex")
-    .slice(0, 32);
-}
+// Only the team decides whether to keep the current date.
 
 function page(body) {
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>Face Painting California</title></head>
@@ -35,11 +27,7 @@ export default async function handler(req, res) {
     return send(400, "<h2>Incomplete link</h2><p>This link is missing information.</p>");
   }
 
-  const expected = expectedToken(eventId);
-  const ok =
-    token.length === expected.length &&
-    crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected));
-  if (!ok) {
+  if (!verifyToken(token, ownerToken(eventId))) {
     return send(403, "<h2>Invalid link</h2><p>This link isn't valid.</p>");
   }
 

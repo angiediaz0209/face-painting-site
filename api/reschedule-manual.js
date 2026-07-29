@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { moveBooking } from "./_lib/book.js";
 import { syncBookingsToSheet } from "./_lib/sheets.js";
 import { sendEmail, clientConfirmationHtml } from "./_lib/email.js";
+import { clientToken } from "./_lib/tokens.js";
 
 const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
 const OWNER_PASSWORD = process.env.OWNER_DASHBOARD_PASSWORD || "";
@@ -16,8 +17,9 @@ function sessionToken() {
     .slice(0, 40);
 }
 
+// The client's status link (see api/_lib/tokens.js for why this is scoped).
 function statusToken(eventId) {
-  return crypto.createHmac("sha256", CONFIRM_SECRET).update(eventId).digest("hex").slice(0, 32);
+  return clientToken(eventId);
 }
 
 function isAuthed(req) {

@@ -1,7 +1,25 @@
 import { useState, useRef, useEffect } from 'react';
 import { MinusIcon } from './Icons';
+import {
+  Chips,
+  DatePickerCard,
+  TimeCard,
+  QuoteCard,
+  DetailsForm,
+  SuccessCard,
+} from './ChatWidgets';
 
 const API_URL = '/api';
+
+const GREETING = {
+  role: 'assistant',
+  content:
+    "Hey! I'm Sky with Face Painting California 🎨\nWhat are you celebrating? Tell me a bit about it and I'll get you a price.",
+  ui: {
+    type: 'choices',
+    options: ['Birthday party', 'Corporate event', 'Festival', 'School event'],
+  },
+};
 
 export default function ChatWidget({ onClose }) {
   const [messages, setMessages] = useState(() => {
@@ -21,18 +39,16 @@ export default function ChatWidget({ onClose }) {
   }, [messages, isLoading]);
 
   useEffect(() => {
-    if (messages.length === 0) {
-      setMessages([{
-        role: 'assistant',
-        content: "Hey! I'm Sky with Face Painting California 🎨\nWhat are you celebrating? Tell me a bit about it and I'll get you a price."
-      }]);
-    }
+    if (messages.length === 0) setMessages([GREETING]);
   }, []);
 
   const sendMessageText = async (userMessage) => {
     if (isLoading) return;
+    // Send the widgets along with the transcript: the server ignores them when
+    // talking to the model, but uses them to know what Sky has already shown so
+    // she can't repeat a widget the client has already answered.
     const updatedMessages = [...messages, { role: 'user', content: userMessage }];
-    setMessages(updatedMessages);
+    setMessages((prev) => [...prev, { role: 'user', content: userMessage }]);
     setIsLoading(true);
 
     try {
@@ -43,12 +59,19 @@ export default function ChatWidget({ onClose }) {
         body: JSON.stringify({ message: userMessage, conversationHistory: updatedMessages, website: '' }),
       });
       const data = await res.json();
-      setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: data.response, ui: data.ui || null },
+      ]);
     } catch {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: "I'm having trouble connecting right now. Please text us at 415-991-9374 and we'll get you a quote right away! 🎨"
-      }]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content:
+            "I'm having trouble connecting right now. Please text us at 415-991-9374 and we'll get you a quote right away! 🎨",
+        },
+      ]);
     } finally {
       setIsLoading(false);
     }
@@ -62,22 +85,94 @@ export default function ChatWidget({ onClose }) {
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
   };
 
   const clearChat = () => {
     localStorage.removeItem('sky-chat-history');
-    setMessages([{
-      role: 'assistant',
-      content: "Hey! I'm Sky with Face Painting California 🎨\nWhat are you celebrating? Tell me a bit about it and I'll get you a price."
-    }]);
+    setMessages([GREETING]);
+  };
+
+  // The details form posts straight to /api/booking, so there's nothing to ask
+  // Sky — swap the form for a confirmation and add her sign-off locally.
+  const handleSubmitted = (result) => {
+    setMessages((prev) => {
+      const next = [...prev];
+      for (let i = next.length - 1; i >= 0; i--) {
+        if (next[i].ui?.type === 'details_form') {
+          next[i] = { ...next[i], ui: { type: 'success', result } };
+          break;
+        }
+      }
+      const first = (result.name || '').split(' ')[0];
+      return [
+        ...next,
+        {
+          role: 'assistant',
+          content: result.duplicate
+            ? "Looks like we already had that one from you. Our team is on it and they'll be in touch shortly."
+            : `That's you sorted${first ? `, ${first}` : ''}. Our team will confirm by text shortly. Anything else I can help with?`,
+        },
+      ];
+    });
+  };
+
+  // Only the newest widget is live; older ones stay visible but disabled so old
+  // chips can't be tapped again out of context.
+  const lastWidgetIndex = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) if (messages[i].ui) return i;
+    return -1;
+  })();
+
+  const renderWidget = (msg, index) => {
+    const stale = index !== lastWidgetIndex || isLoading;
+    const pick = (text) => sendMessageText(text);
+
+    switch (msg.ui.type) {
+      case 'choices':
+        return <Chips options={msg.ui.options} onPick={pick} disabled={stale} />;
+      case 'date_picker':
+        return <DatePickerCard onPick={pick} disabled={stale} />;
+      case 'time_picker':
+        return <TimeCard hours={msg.ui.hours} onPick={pick} disabled={stale} />;
+      case 'quote':
+        return (
+          <QuoteCard
+            city={msg.ui.city}
+            hours={msg.ui.hours}
+            secondArtist={msg.ui.secondArtist}
+            onAccept={pick}
+            disabled={stale}
+          />
+        );
+      case 'details_form':
+        return (
+          <DetailsForm
+            booking={msg.ui.booking}
+            transcript={messages.map(({ role, content }) => ({ role, content }))}
+            onSubmitted={handleSubmitted}
+            disabled={index !== lastWidgetIndex}
+          />
+        );
+      case 'success':
+        return <SuccessCard result={msg.ui.result} />;
+      default:
+        return null;
+    }
   };
 
   return (
-    <div className="fixed z-50 right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] sm:bottom-4 w-[calc(100vw-2rem)] max-w-sm">
-      <div className="bg-white shadow-2xl h-[min(70vh,480px)] flex flex-col overflow-hidden border border-navy/10 rounded-2xl">
+    <div className="fixed inset-0 z-50 flex sm:items-end sm:justify-end sm:p-4 pointer-events-none">
+      <div
+        role="dialog"
+        aria-label="Chat with Sky"
+        className="pointer-events-auto bg-white shadow-2xl flex flex-col w-full sm:w-[26rem] h-full sm:h-[min(80vh,620px)] sm:rounded-2xl overflow-hidden border border-navy/10"
+      >
         {/* Header */}
-        <div className="bg-gradient-to-br from-coral to-salmon p-3.5 text-white flex items-center justify-between shrink-0 rounded-t-2xl">
+        <div className="bg-gradient-to-br from-coral to-salmon px-3.5 pt-[max(0.875rem,env(safe-area-inset-top))] pb-3.5 text-white flex items-center justify-between shrink-0">
           <div>
             <h3 className="font-display text-base">Chat with Sky</h3>
             <p className="text-white/80 font-body text-xs">Face Painting California</p>
@@ -104,14 +199,19 @@ export default function ChatWidget({ onClose }) {
         {/* Messages */}
         <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2.5 bg-cream">
           {messages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 font-body text-sm whitespace-pre-wrap ${
-                msg.role === 'user'
-                  ? 'bg-coral text-white rounded-br-sm'
-                  : 'bg-white text-navy rounded-bl-sm shadow-sm'
-              }`}>
-                {msg.content}
+            <div key={i}>
+              <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div
+                  className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 font-body text-sm whitespace-pre-wrap ${
+                    msg.role === 'user'
+                      ? 'bg-coral text-white rounded-br-sm'
+                      : 'bg-white text-navy rounded-bl-sm shadow-sm'
+                  }`}
+                >
+                  {msg.content}
+                </div>
               </div>
+              {msg.role === 'assistant' && msg.ui && renderWidget(msg, i)}
             </div>
           ))}
           {isLoading && (
@@ -124,25 +224,8 @@ export default function ChatWidget({ onClose }) {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Action Buttons */}
-        <div className="px-3 py-1.5 flex gap-2 border-t border-navy/5 shrink-0 bg-white">
-          <button
-            onClick={() => sendMessageText("I'd like to book my event!")}
-            disabled={isLoading}
-            className="flex-1 bg-salmon hover:bg-salmon-dark text-white text-center text-xs font-body font-bold py-2 rounded-full transition-colors disabled:opacity-50"
-          >
-            Book Now
-          </button>
-          <a
-            href="sms:4159919374"
-            className="flex-1 bg-coral/10 hover:bg-coral/20 text-navy text-center text-xs font-body font-bold py-2 rounded-full transition-colors"
-          >
-            Text Us
-          </a>
-        </div>
-
         {/* Input */}
-        <div className="p-3 border-t border-navy/5 shrink-0 bg-white rounded-b-2xl">
+        <div className="p-3 border-t border-navy/5 shrink-0 bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div className="flex gap-2">
             <input
               type="text"
@@ -160,9 +243,12 @@ export default function ChatWidget({ onClose }) {
               Send
             </button>
           </div>
-          <p className="text-center text-navy/40 font-body text-[11px] mt-2">
-            Minimize anytime — your conversation stays saved here 💬
-          </p>
+          <a
+            href="sms:4159919374"
+            className="block text-center text-navy/40 hover:text-coral font-body text-[11px] mt-2 transition-colors"
+          >
+            Prefer to text? 415-991-9374
+          </a>
         </div>
       </div>
     </div>

@@ -1,22 +1,11 @@
-import crypto from "crypto";
 import { applyReschedule } from "./_lib/book.js";
 import { setBookingStatus } from "./_lib/sheets.js";
 import { sendEmail, clientConfirmationHtml } from "./_lib/email.js";
+import { ownerToken, verifyToken, statusUrlFor } from "./_lib/tokens.js";
 
-const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
-const BASE_URL = process.env.APP_BASE_URL || "https://face-painting-site.vercel.app";
-
-function expectedToken(eventId) {
-  return crypto
-    .createHmac("sha256", CONFIRM_SECRET)
-    .update(eventId)
-    .digest("hex")
-    .slice(0, 32);
-}
-
-function statusUrl(eventId) {
-  return `${BASE_URL}/api/status?eventId=${encodeURIComponent(eventId)}&token=${expectedToken(eventId)}`;
-}
+// Moving the event is an OWNER action; the status link emailed back to the
+// client is signed as a client token.
+const statusUrl = (eventId) => statusUrlFor(eventId);
 
 function page(body) {
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>Face Painting California</title></head>
@@ -40,11 +29,7 @@ export default async function handler(req, res) {
     return send(400, "<h2>Incomplete link</h2><p>This link is missing information.</p>");
   }
 
-  const expected = expectedToken(eventId);
-  const ok =
-    token.length === expected.length &&
-    crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected));
-  if (!ok) {
+  if (!verifyToken(token, ownerToken(eventId))) {
     return send(403, "<h2>Invalid link</h2><p>This link isn't valid.</p>");
   }
 

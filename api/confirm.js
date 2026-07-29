@@ -1,23 +1,11 @@
-import crypto from "crypto";
 import { confirmBooking } from "./_lib/book.js";
 import { setBookingStatus } from "./_lib/sheets.js";
 import { sendEmail, clientConfirmationHtml } from "./_lib/email.js";
+import { ownerToken, verifyToken, statusUrlFor } from "./_lib/tokens.js";
 
-// Must match the scheme in api/notify.js so the emailed link verifies.
-const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
-const BASE_URL = process.env.APP_BASE_URL || "https://face-painting-site.vercel.app";
-
-function statusUrl(eventId) {
-  return `${BASE_URL}/api/status?eventId=${encodeURIComponent(eventId)}&token=${expectedToken(eventId)}`;
-}
-
-function expectedToken(eventId) {
-  return crypto
-    .createHmac("sha256", CONFIRM_SECRET)
-    .update(eventId)
-    .digest("hex")
-    .slice(0, 32);
-}
+// Approving is an OWNER action, so this link carries an owner token. The status
+// link we email the client is signed differently and can't be used here.
+const statusUrl = (eventId) => statusUrlFor(eventId);
 
 function page(body) {
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>Face Painting California</title></head>
@@ -42,11 +30,7 @@ export default async function handler(req, res) {
   }
 
   // Constant-time compare to avoid token guessing.
-  const expected = expectedToken(eventId);
-  const ok =
-    token.length === expected.length &&
-    crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected));
-  if (!ok) {
+  if (!verifyToken(token, ownerToken(eventId))) {
     return send(403, "<h2>Invalid link</h2><p>This approval link isn't valid.</p>");
   }
 

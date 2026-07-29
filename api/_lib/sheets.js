@@ -519,6 +519,209 @@ export async function addReview({ name, rating, eventType, text, key }) {
   return id;
 }
 
+// ── Settings tab ──────────────────────────────────────────────────────────────
+// Owner-controlled switches that change how Sky behaves, without a redeploy.
+// Simple key/value rows.
+//
+// Sky reads these on every chat message, so they're cached in memory per warm
+// serverless instance. A toggle therefore takes up to SETTINGS_TTL_MS to take
+// effect, which is the right trade for not hitting Sheets on every message.
+const SETTINGS_HEADERS = ["Key", "Value"];
+const SETTINGS_RANGE = "Settings!A:B";
+const SETTINGS_TTL_MS = 60 * 1000;
+
+let settingsCache = { at: 0, values: null };
+
+async function ensureSettingsSheet(sheets, sheetId) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId, fields: "sheets.properties.title" });
+  const exists = (meta.data.sheets || []).some((s) => s.properties?.title === "Settings");
+  if (!exists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: sheetId,
+      requestBody: { requests: [{ addSheet: { properties: { title: "Settings" } } }] },
+    });
+  }
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: "Settings!A1:B1" });
+  const current = res.data.values?.[0] || [];
+  if (current.join("|") !== SETTINGS_HEADERS.join("|")) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: sheetId,
+      range: "Settings!A1:B1",
+      valueInputOption: "RAW",
+      requestBody: { values: [SETTINGS_HEADERS] },
+    });
+  }
+}
+
+/** All settings as a plain object. Cached; pass { fresh: true } to bypass. */
+export async function getSettings({ fresh = false } = {}) {
+  if (!fresh && settingsCache.values && Date.now() - settingsCache.at < SETTINGS_TTL_MS) {
+    return settingsCache.values;
+  }
+  const client = getSheetsClient();
+  if (!client) return {};
+  const { sheets, sheetId } = client;
+  try {
+    await ensureSettingsSheet(sheets, sheetId);
+    const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: SETTINGS_RANGE });
+    const values = {};
+    for (const row of (res.data.values || []).slice(1)) {
+      const key = (row[0] || "").trim();
+      if (key) values[key] = (row[1] || "").trim();
+    }
+    settingsCache = { at: Date.now(), values };
+    return values;
+  } catch (error) {
+    console.error("Settings read error:", error);
+    // Fall back to the last known values rather than silently changing behaviour.
+    return settingsCache.values || {};
+  }
+}
+
+/** Writes one setting and clears the cache so the change is picked up at once. */
+export async function setSetting(key, value) {
+  const client = getSheetsClient();
+  if (!client) return false;
+  const { sheets, sheetId } = client;
+  await ensureSettingsSheet(sheets, sheetId);
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: SETTINGS_RANGE });
+  const rows = res.data.values || [];
+  const rowIndex = rows.findIndex((r, i) => i > 0 && (r[0] || "").trim() === key);
+
+  if (rowIndex > 0) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: sheetId,
+      range: `Settings!B${rowIndex + 1}`,
+      valueInputOption: "RAW",
+      requestBody: { values: [[String(value)]] },
+    });
+  } else {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: sheetId,
+      range: SETTINGS_RANGE,
+      valueInputOption: "RAW",
+      insertDataOption: "INSERT_ROWS",
+      requestBody: { values: [[key, String(value)]] },
+    });
+  }
+  settingsCache = { at: 0, values: null };
+  return true;
+}
+
+// Is a second artist bookable right now? Defaults to FALSE: if the sheet is
+// unreachable we must not have Sky selling capacity that may not exist.
+export const SECOND_ARTIST_KEY = "second_artist_available";
+
+export async function isSecondArtistAvailable() {
+  const settings = await getSettings();
+  return settings[SECOND_ARTIST_KEY] === "yes";
+}
+
+// ── Conversations tab ─────────────────────────────────────────────────────────
+// Sky's chats, kept only when they produced something: a booking or a lead. The
+// transcript otherwise lives solely in the visitor's own browser.
+//
+// These rows are more sensitive than a booking record — they contain children's
+// names and ages, addresses, and offhand remarks people didn't think were being
+// filed. Keep only what's useful and purge them periodically; there's no reason
+// to hold a year-old chat about a party that already happened.
+const CONVERSATION_HEADERS = [
+  "ID", "Logged", "Outcome", "Name", "Phone", "Email", "Summary", "Transcript",
+];
+const CONVERSATION_RANGE = "Conversations!A:H";
+
+// A transcript can run long and a Sheets cell caps out at 50k characters, so
+// keep a generous but bounded slice.
+const MAX_TRANSCRIPT_CHARS = 40000;
+
+function rowToConversation(cells, rowNumber) {
+  const g = (i) => (cells[i] || "").trim();
+  return {
+    rowNumber,
+    id: g(0),
+    logged: g(1),
+    outcome: g(2) || "chat",
+    name: g(3),
+    phone: g(4),
+    email: g(5),
+    summary: g(6),
+    transcript: g(7),
+  };
+}
+
+async function ensureConversationsSheet(sheets, sheetId) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId, fields: "sheets.properties.title" });
+  const exists = (meta.data.sheets || []).some((s) => s.properties?.title === "Conversations");
+  if (!exists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: sheetId,
+      requestBody: { requests: [{ addSheet: { properties: { title: "Conversations" } } }] },
+    });
+  }
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: "Conversations!A1:H1" });
+  const current = res.data.values?.[0] || [];
+  if (current.join("|") !== CONVERSATION_HEADERS.join("|")) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: sheetId,
+      range: "Conversations!A1:H1",
+      valueInputOption: "RAW",
+      requestBody: { values: [CONVERSATION_HEADERS] },
+    });
+  }
+}
+
+/** Newest first, so the dashboard shows recent chats at the top. */
+export async function getConversations() {
+  const client = getSheetsClient();
+  if (!client) return [];
+  const { sheets, sheetId } = client;
+  await ensureConversationsSheet(sheets, sheetId);
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: CONVERSATION_RANGE });
+  const rows = res.data.values || [];
+  return rows
+    .slice(1)
+    .map((c, i) => rowToConversation(c, i + 2))
+    .filter((c) => c.id)
+    .reverse();
+}
+
+/**
+ * Records a finished conversation. `messages` is the chat transcript as
+ * [{ role, content }]. Called from the non-blocking side-effect batch, so a
+ * Sheets failure can never cost a booking.
+ */
+export async function addConversation({ outcome, name, phone, email, summary, messages }) {
+  const client = getSheetsClient();
+  if (!client) return null;
+  const { sheets, sheetId } = client;
+  await ensureConversationsSheet(sheets, sheetId);
+
+  // Filter on the message content, not the formatted line: "Client: " is eight
+  // characters, so a length check would let blank messages through as empty rows.
+  const transcript = (Array.isArray(messages) ? messages : [])
+    .map((m) => ({ role: m.role, content: String(m.content || "").trim() }))
+    .filter((m) => m.content)
+    .map((m) => `${m.role === "user" ? "Client" : "Sky"}: ${m.content}`)
+    .join("\n")
+    .slice(0, MAX_TRANSCRIPT_CHARS);
+
+  if (!transcript) return null;
+
+  const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  const row = [
+    id, nowStamp(), outcome || "chat", name || "", phone || "", email || "",
+    summary || "", transcript,
+  ];
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: sheetId,
+    range: CONVERSATION_RANGE,
+    valueInputOption: "RAW",
+    insertDataOption: "INSERT_ROWS",
+    requestBody: { values: [row] },
+  });
+  return id;
+}
+
 /** Sets a review's Status by ID ("approved" / "rejected" / "pending"). */
 export async function setReviewStatus(id, status) {
   const client = getSheetsClient();

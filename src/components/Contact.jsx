@@ -29,7 +29,7 @@ export default function Contact({ onOpenChat }) {
             <div className="w-14 h-14 bg-teal rounded-full flex items-center justify-center mx-auto mb-4">
               <PaletteIcon className="w-7 h-7 text-white" />
             </div>
-            <p className="font-display text-navy mb-1 group-hover:text-teal transition text-lg">Get an Instant Quote</p>
+            <p className="font-display text-navy mb-1 group-hover:text-teal transition text-lg">Book in a Minute</p>
             <p className="text-teal font-body font-bold text-lg">Chat with Sky</p>
           </button>
         </div>

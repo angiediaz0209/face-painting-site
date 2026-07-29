@@ -2,9 +2,60 @@ import Anthropic from "@anthropic-ai/sdk";
 import getSkySystemPrompt from "./_lib/sky-system-prompt.js";
 import { createBooking, checkAvailability } from "./_lib/book.js";
 import { sendBookingNotification } from "./_lib/notify.js";
-import { addBookingToSheet } from "./_lib/sheets.js";
+import { addBookingToSheet, addConversation, isSecondArtistAvailable } from "./_lib/sheets.js";
 import { computeQuote } from "./_lib/pricing.js";
 import { lookupClient, upsertClient } from "./_lib/clients.js";
+
+// Prep context for the artist, shared by show_details_form and create_booking.
+// Deliberately FLAT optional strings rather than a nested object: a heavy nested
+// schema measurably made the model reluctant to call the tool at all.
+const DETAIL_PROPS = {
+  honoree: {
+    type: "string",
+    description:
+      "For birthdays: who the party is for, plus their age if it came up. e.g. 'Maya, turning 6'.",
+  },
+  companyName: {
+    type: "string",
+    description: "For corporate events: the company's name.",
+  },
+  occasion: {
+    type: "string",
+    description:
+      "For corporate events: the occasion, e.g. holiday party, family day, team building, product launch.",
+  },
+  guestMix: {
+    type: "string",
+    enum: ["kids", "adults", "both"],
+    description:
+      "Whether the people being painted are kids, adults, or both. This decides what the artist packs, so fill it in whenever you know.",
+  },
+  specialRequests: {
+    type: "string",
+    description:
+      "Anything the client VOLUNTEERED that the artist should know: allergies or sensitive skin, a nervous child, parking or setup notes, a theme they mentioned unprompted. Never ask for this, only record what they offered.",
+  },
+  customRequest: {
+    type: "string",
+    description:
+      "Only if the client raised custom or branded designs themselves (a logo, brand colours, a specific character). Record what they asked for. You never offer or promise this; it flags the booking for the team to discuss with them.",
+  },
+  secondArtistRequested: {
+    type: "string",
+    description:
+      "Only when a second artist is NOT available and the client asked for one anyway. Note what they wanted and why, so the team can try to arrange one. Leave empty otherwise.",
+  },
+};
+
+// Pulls those flat fields back into the `details` object createBooking expects.
+function pickDetails(input = {}) {
+  const out = {};
+  for (const key of Object.keys(DETAIL_PROPS)) {
+    const value = input[key];
+    if (typeof value === "string" && value.trim()) out[key] = value.trim();
+  }
+  return out;
+}
 
 const AVAILABILITY_TOOL = {
   name: "check_availability",
@@ -76,6 +127,7 @@ const BOOKING_TOOL = {
         description:
           "Any special requests, themes, or additional notes from the client",
       },
+      ...DETAIL_PROPS,
       pending: {
         type: "boolean",
         description:
@@ -160,7 +212,138 @@ const SAVE_LEAD_TOOL = {
   },
 };
 
-const TOOLS = [QUOTE_TOOL, AVAILABILITY_TOOL, BOOKING_TOOL, LOOKUP_CLIENT_TOOL, SAVE_LEAD_TOOL];
+// ── Widget tools ────────────────────────────────────────────────────────────
+// These don't do any work server-side. They let Sky attach a structured widget
+// to her reply, which the chat renders under her message. Tapping one just
+// sends normal text back, so the conversation stays a conversation and the
+// client can always type something Sky didn't offer.
+//
+// Anything deterministic (price math, the calendar) is computed in the browser,
+// so a tap is instant and costs nothing.
+
+const SHOW_OPTIONS_TOOL = {
+  name: "show_options",
+  description:
+    "Shows tappable answer chips under your message, so the client can answer with one tap instead of typing. Use it whenever your question has a few obvious answers (event type, guest count, yes/no). ALWAYS still ask the question in your own words in your message; the chips are shortcuts, not a replacement for asking. Keep options short (a few words each). The client can still type a different answer, so never treat the options as the only choices.",
+  input_schema: {
+    type: "object",
+    properties: {
+      options: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "Between 2 and 6 short answers, e.g. ['Birthday party','Corporate event','Festival','School event'] or ['Up to 12','13 to 22','23 or more'].",
+      },
+    },
+    required: ["options"],
+  },
+};
+
+const SHOW_DATE_PICKER_TOOL = {
+  name: "show_date_picker",
+  description:
+    "Shows a calendar under your message with already-booked days crossed out, so the client taps a date instead of typing one. Use this when you're asking what date their event is. It saves you calling check_availability for a date that's already taken.",
+  input_schema: { type: "object", properties: {} },
+};
+
+const SHOW_TIME_PICKER_TOOL = {
+  name: "show_time_picker",
+  description:
+    "Shows tappable start times under your message, plus an 'Another time' option for anything not on the list. Use when asking what time the event starts. Pass the package length so the card can show the client the finish time too.",
+  input_schema: {
+    type: "object",
+    properties: {
+      hours: {
+        type: "number",
+        description:
+          "The package length in hours, so the card can show the client the full range (e.g. 2:00 PM to 4:00 PM). Defaults to 2 if you don't know it yet.",
+      },
+    },
+  },
+};
+
+const SHOW_QUOTE_TOOL = {
+  name: "show_quote",
+  description:
+    "Shows an itemised price card with a Book this button. The card does the math itself from what you pass, so use this INSTEAD of calculate_quote when you're ready to present a price to the client. Say the recommendation in your own words in your message, then show the card. Show it ONCE, when you first present the price. Once the client has agreed, never show it again — move on to the date, then show_details_form. Only show it a second time if they change the package.",
+  input_schema: {
+    type: "object",
+    properties: {
+      city: { type: "string", description: "The event city." },
+      hours: { type: "number", description: "Painting hours: 1, 2, 3..." },
+      secondArtist: { type: "boolean", description: "Whether a second artist is included." },
+    },
+    required: ["city", "hours"],
+  },
+};
+
+const SHOW_DETAILS_FORM_TOOL = {
+  name: "show_details_form",
+  description:
+    "Shows a short form for name, email, phone and address, which the client's browser can autofill in one tap. This is the ONLY way you should ever collect a name, email, phone or address — never ask for them in a message, and never ask permission to show this form. Call it as soon as the client has agreed to the price and you know the city, date, start time, event type and guest count. Submitting it creates the pending booking and notifies the team, so do NOT also call create_booking afterwards.",
+  input_schema: {
+    type: "object",
+    properties: {
+      city: { type: "string", description: "Event city." },
+      date: { type: "string", description: "Event date, YYYY-MM-DD." },
+      startTime: { type: "string", description: "Start time, HH:MM 24-hour." },
+      eventType: { type: "string", description: "e.g. Birthday Party." },
+      guestBand: {
+        type: "string",
+        enum: ["small", "medium", "large"],
+        description: "small = up to 12 guests, medium = 13 to 22, large = 23 or more.",
+      },
+      hours: { type: "number", description: "Painting hours." },
+      secondArtist: { type: "boolean", description: "Whether a second artist is included." },
+      notes: { type: "string", description: "Anything else useful the client mentioned." },
+      ...DETAIL_PROPS,
+    },
+    required: ["city", "date", "startTime", "eventType", "guestBand", "hours"],
+  },
+};
+
+// Widget tools are recognised here and handled without any server work.
+const WIDGET_TOOLS = {
+  show_options: (input) => ({ type: "choices", options: input.options || [] }),
+  show_date_picker: () => ({ type: "date_picker" }),
+  show_time_picker: (input) => ({
+    type: "time_picker",
+    hours: Number(input.hours) > 0 ? Number(input.hours) : 2,
+  }),
+  show_quote: (input) => ({
+    type: "quote",
+    city: input.city,
+    hours: Number(input.hours) || 2,
+    secondArtist: input.secondArtist === true,
+  }),
+  show_details_form: (input) => ({
+    type: "details_form",
+    booking: {
+      city: input.city,
+      date: input.date,
+      startTime: input.startTime,
+      eventType: input.eventType,
+      guestBand: input.guestBand,
+      hours: Number(input.hours) || 2,
+      secondArtist: input.secondArtist === true,
+      notes: input.notes || "",
+      details: pickDetails(input),
+    },
+  }),
+};
+
+const TOOLS = [
+  QUOTE_TOOL,
+  AVAILABILITY_TOOL,
+  BOOKING_TOOL,
+  LOOKUP_CLIENT_TOOL,
+  SAVE_LEAD_TOOL,
+  SHOW_OPTIONS_TOOL,
+  SHOW_DATE_PICKER_TOOL,
+  SHOW_TIME_PICKER_TOOL,
+  SHOW_QUOTE_TOOL,
+  SHOW_DETAILS_FORM_TOOL,
+];
 
 // ── Abuse protection ────────────────────────────────────────────────────────
 // /api/chat is public and costs money per message (and can create real
@@ -195,10 +378,27 @@ function isRateLimited(ip) {
   return recent.length > RATE_LIMIT_MAX;
 }
 
-async function handleToolUse(toolUse) {
+// `ctx.transcript` is the conversation so far, used to archive chats that ended
+// in a lead or a booking. See the Conversations tab in api/_lib/sheets.js.
+async function handleToolUse(toolUse, ctx = {}) {
+  // Widget tools do no work here; the directive is collected by the caller and
+  // sent to the browser alongside Sky's reply.
+  if (WIDGET_TOOLS[toolUse.name]) {
+    return {
+      type: "tool_result",
+      tool_use_id: toolUse.id,
+      content: JSON.stringify({
+        shown: true,
+        note: "Displayed to the client. Now write your message asking the question in your own words.",
+      }),
+    };
+  }
+
   if (toolUse.name === "calculate_quote") {
     try {
-      const result = computeQuote(toolUse.input);
+      const input = { ...toolUse.input };
+      if (ctx.secondArtistAvailable === false) input.secondArtist = false;
+      const result = computeQuote(input);
       return {
         type: "tool_result",
         tool_use_id: toolUse.id,
@@ -244,6 +444,16 @@ async function handleToolUse(toolUse) {
         lastEventType: eventType || "",
         notes: notes || "",
       });
+      // Keep the chat that produced this lead, so the team can see what they
+      // actually wanted before following up. Never fatal.
+      await addConversation({
+        outcome: "lead",
+        name,
+        phone,
+        email,
+        summary: [eventType, notes].filter(Boolean).join(" — "),
+        messages: ctx.transcript,
+      }).catch((err) => console.error("Conversation log error:", err));
       return {
         type: "tool_result",
         tool_use_id: toolUse.id,
@@ -310,7 +520,11 @@ async function handleToolUse(toolUse) {
       // Every booking must be team-approved before it is confirmed, so force
       // pending here regardless of what the model passed. This guarantees no
       // booking auto-confirms or sends the client an invite without approval.
-      const bookingInput = { ...toolUse.input, pending: true };
+      const bookingInput = {
+        ...toolUse.input,
+        pending: true,
+        details: pickDetails(toolUse.input),
+      };
       const bookingResult = await createBooking(bookingInput);
       const isPending = bookingResult.pending;
 
@@ -339,6 +553,14 @@ async function handleToolUse(toolUse) {
           },
           { incrementBookings: true }
         ).catch((err) => console.error("Client upsert error:", err)),
+        addConversation({
+          outcome: "booking",
+          name: bookingInput.clientName,
+          phone: bookingInput.clientPhone,
+          email: bookingInput.clientEmail,
+          summary: `${bookingInput.eventType || "Event"} · ${bookingInput.date} · ${bookingInput.quote || ""}`.trim(),
+          messages: ctx.transcript,
+        }).catch((err) => console.error("Conversation log error:", err)),
       ]);
 
       return {
@@ -410,6 +632,28 @@ export default async function handler(req, res) {
     const client = new Anthropic();
     const recentHistory = conversationHistory.slice(-10);
 
+    // Owner-controlled and cached, so this is usually free. Defaults to false if
+    // the sheet is unreachable — better to under-sell than to promise an artist
+    // who doesn't exist.
+    const secondArtistAvailable = await isSecondArtistAvailable().catch(() => false);
+
+    // Widgets already shown earlier in this conversation. The model is prone to
+    // re-showing the price card after the client has accepted it, so we enforce
+    // "show it once" here instead of relying on the instructions alone.
+    // Full conversation (not the 10-message slice sent to the model), used only
+    // to archive chats that end in a lead or a booking.
+    const transcriptMessages = [
+      ...conversationHistory.map((m) => ({ role: m.role, content: m.content })),
+      { role: "user", content: message },
+    ];
+
+    const shownUi = recentHistory.map((msg) => msg.ui).filter(Boolean);
+    const shownQuote = [...shownUi].reverse().find((ui) => ui.type === "quote");
+    const shownDetailsForm = shownUi.some((ui) => ui.type === "details_form");
+    const pickedDateOrTime = shownUi.some(
+      (ui) => ui.type === "date_picker" || ui.type === "time_picker"
+    );
+
     let messages = [
       ...recentHistory
         .map((msg) => ({
@@ -421,18 +665,19 @@ export default async function handler(req, res) {
     ];
 
     // Helper: call Claude with automatic retry on 529 overloaded errors
-    async function callClaude(msgs) {
+    async function callClaude(msgs, toolChoice) {
       const maxRetries = 3;
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           return await client.messages.create({
             model: "claude-sonnet-5",
             max_tokens: 1024,
+            ...(toolChoice ? { tool_choice: toolChoice } : {}),
             // Keep replies fast and within the 1024-token budget: on Sonnet 5
             // adaptive thinking is on by default, which would add latency and
             // could truncate a reply. Sky doesn't need it for this chat flow.
             thinking: { type: "disabled" },
-            system: getSkySystemPrompt(),
+            system: getSkySystemPrompt({ secondArtistAvailable }),
             tools: TOOLS,
             messages: msgs,
           });
@@ -450,32 +695,135 @@ export default async function handler(req, res) {
     // Loop to handle multiple tool calls (check availability → then book)
     let response = await callClaude(messages);
 
-    // Handle up to 4 rounds of tool use (quote + availability check + booking + confirmation)
+    // The widget Sky attached to her reply, if any. Last one wins, so a reply
+    // never comes back with two competing widgets under it.
+    let ui = null;
+
+    // Sky often writes her message in the SAME response as the tool call, and
+    // then adds nothing after the tool result. Keep the most recent non-empty
+    // text across the whole loop, or the client gets a widget with no question
+    // above it.
+    const textOf = (msg) =>
+      (msg.content || [])
+        .filter((block) => block.type === "text")
+        .map((block) => block.text)
+        .join("")
+        .trim();
+    let latestText = textOf(response);
+
+    // The sentence that belongs with a widget is the one written in the SAME
+    // response as the tool call. Without this, a later message ("and how many
+    // guests?") gets paired with an earlier widget (occasion chips), and the
+    // question and the buttons disagree.
+    let widgetText = "";
+
+    // Handle up to 5 rounds of tool use (quote + availability + widget + booking)
     let rounds = 0;
-    while (response.stop_reason === "tool_use" && rounds < 4) {
+    while (response.stop_reason === "tool_use" && rounds < 5) {
       rounds++;
-      const toolUse = response.content.find(
-        (block) => block.type === "tool_use"
-      );
+      const toolUses = response.content.filter((block) => block.type === "tool_use");
+      if (!toolUses.length) break;
 
-      if (!toolUse) break;
+      // Every tool_use block needs its own tool_result, so handle them all —
+      // returning only the first breaks the request when the model calls two
+      // tools at once.
+      const toolResults = [];
+      for (const toolUse of toolUses) {
+        const build = WIDGET_TOOLS[toolUse.name];
+        if (build) {
+          try {
+            const rawInput = toolUse.input || {};
+            // Hard guard: no matter what the model decides, it cannot quote or
+            // book a second artist while one isn't available.
+            if (!secondArtistAvailable && rawInput.secondArtist === true) {
+              rawInput.secondArtist = false;
+            }
+            const widget = build(rawInput);
 
-      const toolResult = await handleToolUse(toolUse);
+            // A repeat of the identical price card means the client already
+            // accepted it. Drop the widget and point Sky at the next step
+            // instead. A genuinely different package still gets a new card.
+            const isRepeatQuote =
+              widget.type === "quote" &&
+              shownQuote &&
+              shownQuote.city === widget.city &&
+              Number(shownQuote.hours) === widget.hours &&
+              Boolean(shownQuote.secondArtist) === widget.secondArtist;
+
+            if (isRepeatQuote) {
+              toolResults.push({
+                type: "tool_result",
+                tool_use_id: toolUse.id,
+                content: JSON.stringify({
+                  shown: false,
+                  note: "Nothing was displayed. You already showed this exact price card and the client moved past it, so it was suppressed. Do NOT reply with text alone — the client would see a promise of a form that never appears. If you have the city, date, start time, event type and guest band, call show_details_form RIGHT NOW. If something is still missing, ask for that instead with the matching widget.",
+                }),
+              });
+              continue;
+            }
+
+            ui = widget;
+            widgetText = textOf(response);
+          } catch (err) {
+            console.error("Widget build error:", err);
+          }
+        }
+        toolResults.push(
+          await handleToolUse(toolUse, {
+            transcript: transcriptMessages,
+            secondArtistAvailable,
+          })
+        );
+      }
 
       messages = [
         ...messages,
         { role: "assistant", content: response.content },
-        { role: "user", content: [toolResult] },
+        { role: "user", content: toolResults },
       ];
 
       response = await callClaude(messages);
+      const text = textOf(response);
+      if (text) latestText = text;
     }
 
-    // Extract text from the final response
-    const textBlock = response.content.find((block) => block.type === "text");
-    const reply = textBlock ? textBlock.text : "";
+    // The model reliably narrates the details form ("let me get your details")
+    // without actually calling the tool, which leaves the client staring at a
+    // promise and no form. Instructions did not fix it, so when the
+    // conversation is unambiguously at that step, force the call.
+    if (!ui && shownQuote && pickedDateOrTime && !shownDetailsForm) {
+      try {
+        const forced = await callClaude(messages, {
+          type: "tool",
+          name: "show_details_form",
+        });
+        const toolUse = forced.content.find(
+          (block) => block.type === "tool_use" && block.name === "show_details_form"
+        );
+        if (toolUse) {
+          ui = WIDGET_TOOLS.show_details_form(toolUse.input || {});
+          // Keep whatever she actually said; only the widget was missing.
+          if (!latestText) latestText = textOf(forced);
+        }
+      } catch (err) {
+        // Not worth failing the whole reply over — she just gets no form this
+        // turn and will usually offer it again on the next message.
+        console.error("Forced details form failed:", err);
+      }
+    }
 
-    return res.status(200).json({ response: reply });
+    // Prefer the widget's own sentence; fall back to the latest text when she
+    // called the tool without saying anything in that response.
+    let reply = widgetText || latestText;
+
+    // When a tool call is forced, the model sometimes writes a stage direction
+    // ("[Sends details form]") instead of talking to the client. Never show that.
+    if (/^\s*[[(].*[\])]\s*$/.test(reply)) reply = "";
+    if (!reply && ui?.type === "details_form") {
+      reply = "Pop your details in here and I'll get this over to the team.";
+    }
+
+    return res.status(200).json({ response: reply, ui });
   } catch (error) {
     console.error("Chat error:", error);
 

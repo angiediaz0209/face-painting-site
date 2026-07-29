@@ -1,41 +1,32 @@
-import crypto from "crypto";
 import { sendEmail, pendingNotificationHtml, rescheduleRequestHtml } from "./email.js";
+import { ownerToken } from "./tokens.js";
 
-// Same secret + token scheme as api/confirm.js and api/decline.js so the
-// approve/decline links verify.
-const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
 const BASE_URL = process.env.APP_BASE_URL || "https://face-painting-site.vercel.app";
 
-export function approveToken(eventId) {
-  return crypto
-    .createHmac("sha256", CONFIRM_SECRET)
-    .update(eventId)
-    .digest("hex")
-    .slice(0, 32);
-}
-
+// These four links go only to the team, so they carry an OWNER token. A client
+// token won't verify on any of them. See api/_lib/tokens.js.
 function approveUrl(eventId) {
   return `${BASE_URL}/api/confirm?eventId=${encodeURIComponent(
     eventId
-  )}&token=${approveToken(eventId)}`;
+  )}&token=${ownerToken(eventId)}`;
 }
 
 function declineUrl(eventId) {
   return `${BASE_URL}/api/decline?eventId=${encodeURIComponent(
     eventId
-  )}&token=${approveToken(eventId)}`;
+  )}&token=${ownerToken(eventId)}`;
 }
 
 function rescheduleApproveUrl(eventId) {
   return `${BASE_URL}/api/reschedule-approve?eventId=${encodeURIComponent(
     eventId
-  )}&token=${approveToken(eventId)}`;
+  )}&token=${ownerToken(eventId)}`;
 }
 
 function rescheduleDeclineUrl(eventId) {
   return `${BASE_URL}/api/reschedule-decline?eventId=${encodeURIComponent(
     eventId
-  )}&token=${approveToken(eventId)}`;
+  )}&token=${ownerToken(eventId)}`;
 }
 
 /**

@@ -139,19 +139,44 @@ function ctaButton(href, label, { bg = CORAL, color = "#fff" } = {}) {
 
 // ── 1. Owner: pending booking needs confirmation (image 7) ───────────────────
 export function pendingNotificationHtml(b, { approveUrl, declineUrl, calendarUrl }) {
+  // Context the artist preps with. Each gets its own row rather than being
+  // crammed into Notes, so it's scannable on event morning.
+  const d = b.details || {};
   const rows = [
     detailRow("Client", esc(b.clientName)),
     b.clientEmail ? detailRow("Email", `<a href="mailto:${esc(b.clientEmail)}" style="color:#2f6fd6;text-decoration:none;">${esc(b.clientEmail)}</a>`) : "",
     b.clientPhone ? detailRow("Phone", esc(b.clientPhone)) : "",
     b.eventType ? detailRow("Event", esc(b.eventType)) : "",
+    d.companyName ? detailRow("Company", esc(d.companyName)) : "",
+    d.occasion ? detailRow("Occasion", esc(d.occasion)) : "",
+    d.honoree ? detailRow("Birthday star", esc(d.honoree)) : "",
     b.guestCount ? detailRow("Guests", esc(b.guestCount)) : "",
+    d.guestMix ? detailRow("Guest mix", esc(d.guestMix)) : "",
     detailRow("Date", esc(fmtDate(b.date))),
     detailRow("Time", esc(fmtTimeRange(`${b.startTime} - ${b.endTime}`))),
     b.location ? detailRow("Location", esc(b.location)) : "",
     detailRow("Quote", esc(b.quote), { valueColor: CORAL }),
+    d.specialRequests ? detailRow("Special requests", esc(d.specialRequests)) : "",
+    d.secondArtistRequested
+      ? detailRow("Wanted a 2nd artist", esc(d.secondArtistRequested), { valueColor: CORAL_RED })
+      : "",
     b.notes ? detailRow("Notes", esc(b.notes), { last: true }) : "",
   ].filter(Boolean);
-  // mark the real last row's borders off
+
+  // A custom design request is a decision only the owner can make, so it gets
+  // its own callout above the buttons instead of a row that's easy to skim past.
+  const customCallout = d.customRequest
+    ? `<tr><td style="padding:14px 24px 0;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fdf3ec;border-left:4px solid ${CORAL_RED};border-radius:10px;">
+          <tr><td style="padding:16px 18px;">
+            <div style="font-size:14px;font-weight:800;color:${INK};">🎨 They asked about custom designs</div>
+            <p style="font-size:14px;color:${BODY};line-height:1.5;margin:8px 0 0;">${esc(d.customRequest)}</p>
+            <p style="font-size:13px;color:${MUTED};margin:10px 0 0;">Sky promised nothing. Go over this with them when you confirm the date.</p>
+          </td></tr>
+        </table>
+      </td></tr>`
+    : "";
+
   const inner = `
   <tr><td style="padding:28px 24px 8px;">
     <div style="font-size:20px;font-weight:800;color:${INK};">⚠️ Pending — Needs Confirmation</div>
@@ -161,6 +186,7 @@ export function pendingNotificationHtml(b, { approveUrl, declineUrl, calendarUrl
       ${rows.join("")}
     </table>
   </td></tr>
+  ${customCallout}
   <tr><td style="padding:22px 24px 6px;">
     <table role="presentation" cellpadding="0" cellspacing="0"><tr>
       <td style="padding-right:10px;">${ctaButton(approveUrl, "Approve &amp; Send Invite", { bg: GREEN })}</td>
@@ -222,6 +248,71 @@ export function clientConfirmationHtml(b) {
   ${b.statusUrl ? `<tr><td style="padding:6px 30px 8px;text-align:center;"><a href="${b.statusUrl}" style="font-size:13px;color:${MUTED};text-decoration:underline;">View your booking status anytime</a></td></tr>` : ""}
   <tr><td style="height:8px;"></td></tr>`;
   return shell({ preheader: "Your face painting party is confirmed!", inner });
+}
+
+// ── 2b. Client: request received, awaiting team approval ─────────────────────
+/**
+ * Sent the moment someone submits the website booking form, so they aren't left
+ * in silence until the team approves. Deliberately says "request", not
+ * "confirmed" — nothing is booked until the team approves it.
+ *
+ * `quote` is the object returned by computeQuote(), so the breakdown here always
+ * matches what the client saw on the site.
+ */
+export function clientRequestReceivedHtml(b) {
+  const q = b.quote || {};
+  const money = (n) => `$${Number(n || 0).toLocaleString("en-US")}`;
+  const hourLabel = `${b.hours} ${b.hours === 1 ? "hour" : "hours"} of face painting`;
+
+  const rows = [
+    detailRow("Date", esc(fmtDate(b.date))),
+    detailRow("Time", esc(fmtTimeRange(b.time))),
+    b.location ? detailRow("Location", esc(b.location)) : "",
+    b.eventType ? detailRow("Event", esc(b.eventType)) : "",
+    b.guests ? detailRow("Guests", esc(b.guests), { last: true }) : "",
+  ].filter(Boolean);
+
+  const priceRows = [
+    detailRow(hourLabel, money(q.hoursPrice)),
+    b.secondArtist ? detailRow("Second artist", money(q.secondArtistFee)) : "",
+    detailRow(
+      `Travel to ${esc(q.area || "your area")}`,
+      q.travelFee ? money(q.travelFee) : "Free"
+    ),
+    detailRow("Estimated total", money(q.total), { valueColor: CORAL, last: true }),
+  ].filter(Boolean);
+
+  const inner = `
+  ${heroBanner({
+    bg: CORAL,
+    icon: "📋",
+    title: "We Got Your Request!",
+    subtitle: "Our team is checking the date now",
+  })}
+  <tr><td style="padding:28px 30px 4px;">
+    <div style="font-size:17px;font-weight:800;color:${INK};">Hi ${esc((b.client || "there").split(" ")[0])},</div>
+    <p style="font-size:15px;color:${BODY};line-height:1.6;margin:14px 0 0;">Thanks for sending this over! Your request is with our team now. We'll check artist availability for your date and get back to you shortly to confirm. <b>Nothing is booked just yet</b> — we'll let you know the moment it is.</p>
+  </td></tr>
+  <tr><td style="padding:20px 30px 4px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${CREAM};border-radius:14px;overflow:hidden;">${rows.join("")}</table>
+  </td></tr>
+  <tr><td style="padding:16px 30px 4px;">
+    <div style="font-size:13px;font-weight:800;color:${MUTED};text-transform:uppercase;letter-spacing:.5px;padding-left:4px;margin-bottom:8px;">Your quote</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${CREAM};border-radius:14px;overflow:hidden;">${priceRows.join("")}</table>
+    <div style="font-size:13px;color:${MUTED};padding:10px 4px 0;">No payment is needed now. The balance is due on the day of your event.</div>
+  </td></tr>
+  <tr><td style="padding:20px 30px 6px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f8f8;border-radius:14px;">
+      <tr><td style="padding:18px 20px;">
+        <div style="font-size:14px;font-weight:800;color:${INK};">What happens next</div>
+        <p style="font-size:14px;color:${BODY};line-height:1.6;margin:8px 0 14px;">We'll confirm your date by text at ${BUSINESS_PHONE}, usually within a few hours. Once it's confirmed you'll get a calendar invite from us. Need to change something, or in a hurry? Just text us.</p>
+        <a href="sms:${SMS_NUMBER}" style="display:inline-block;background:#fff;border:1px solid #dfe4e6;color:${INK};padding:11px 20px;border-radius:24px;text-decoration:none;font-weight:700;font-size:14px;">💬 Text Us</a>
+      </td></tr>
+    </table>
+  </td></tr>
+  ${b.statusUrl ? `<tr><td style="padding:14px 30px 8px;text-align:center;"><a href="${b.statusUrl}" style="font-size:13px;color:${MUTED};text-decoration:underline;">Check your request status anytime</a></td></tr>` : ""}
+  <tr><td style="height:8px;"></td></tr>`;
+  return shell({ preheader: "We got your request and we're checking your date.", inner });
 }
 
 // ── 3. Client: booking declined (image 6) ────────────────────────────────────

@@ -43,6 +43,10 @@ const services = [
 export default function App() {
   const [isChatOpen, setIsChatOpen] = useState(false);
 
+  // Booking happens entirely inside Sky's chat, so every booking entry point on
+  // the page just opens her.
+  const openBooking = () => setIsChatOpen(true);
+
   // True once the visitor has sent at least one message — their chat is saved and can be resumed.
   const hasConversation = (() => {
     try {
@@ -98,7 +102,7 @@ export default function App() {
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button
-                onClick={() => setIsChatOpen(true)}
+                onClick={openBooking}
                 className="bg-coral hover:bg-coral-dark text-white font-body font-extrabold py-3.5 px-10 rounded-full text-lg transition-all shadow-[0_5px_0_#E85555] hover:shadow-[0_3px_0_#E85555] hover:translate-y-0.5 active:translate-y-1 active:shadow-[0_1px_0_#E85555]"
               >
                 🎨 Book Now
@@ -159,7 +163,7 @@ export default function App() {
                   <div className="p-5 sm:p-6">
                     <h3 className="text-lg font-display text-navy mb-1.5">{svc.title}</h3>
                     <p className="text-gray font-body text-sm leading-relaxed mb-4">{svc.desc}</p>
-                    <button onClick={() => setIsChatOpen(true)} className={`${svc.bg} hover:opacity-90 text-white font-body font-bold text-xs py-2 px-5 rounded-full transition active:scale-95`}>
+                    <button onClick={openBooking} className={`${svc.bg} hover:opacity-90 text-white font-body font-bold text-xs py-2 px-5 rounded-full transition active:scale-95`}>
                       Check Availability
                     </button>
                   </div>
@@ -173,7 +177,7 @@ export default function App() {
         <Reviews />
         <Clients />
         <FAQ />
-        <Contact onOpenChat={() => setIsChatOpen(true)} />
+        <Contact onOpenChat={() => setIsChatOpen(true)} onOpenBooking={openBooking} />
 
         {/* Floating Chat Button */}
         {!isChatOpen && (

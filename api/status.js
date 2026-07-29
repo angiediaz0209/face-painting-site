@@ -1,28 +1,14 @@
-import crypto from "crypto";
 import { getBooking } from "./_lib/book.js";
 import { clientStatusHtml } from "./_lib/email.js";
 import { setClientFlag } from "./_lib/clients.js";
+import { clientToken, optoutToken, verifyToken } from "./_lib/tokens.js";
 
-// Same secret + token scheme as api/confirm.js / api/decline.js / api/notify.js
-// so a single HMAC of the eventId gates the client's private status link.
-const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
+// This page is the CLIENT's view of their booking, so it verifies a client
+// token. Deliberately different from the owner token on the approve/decline
+// links: holding a status link must not let anyone approve or delete a booking.
 
-function expectedToken(eventId) {
-  return crypto
-    .createHmac("sha256", CONFIRM_SECRET)
-    .update(eventId)
-    .digest("hex")
-    .slice(0, 32);
-}
-
-// Token gating the marketing unsubscribe link (over the client key, not an event).
-export function optoutToken(key) {
-  return crypto
-    .createHmac("sha256", CONFIRM_SECRET)
-    .update(`optout:${key}`)
-    .digest("hex")
-    .slice(0, 32);
-}
+// Re-exported because api/owner.js builds unsubscribe links from it.
+export { optoutToken };
 
 function fallbackPage(body) {
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>Face Painting California</title></head>
@@ -48,12 +34,7 @@ export default async function handler(req, res) {
   if (url.searchParams.get("action") === "optout") {
     const key = url.searchParams.get("key") || "";
     const otoken = url.searchParams.get("token") || "";
-    const expected = optoutToken(key);
-    const ok =
-      key &&
-      otoken.length === expected.length &&
-      crypto.timingSafeEqual(Buffer.from(otoken), Buffer.from(expected));
-    if (!ok) {
+    if (!key || !verifyToken(otoken, optoutToken(key))) {
       return send(403, fallbackPage("<h2>Invalid link</h2><p>This unsubscribe link isn't valid.</p>"));
     }
     if (req.method !== "POST") {
@@ -90,11 +71,7 @@ export default async function handler(req, res) {
     return send(400, fallbackPage("<h2>Incomplete link</h2><p>This status link is missing information.</p>"));
   }
 
-  const expected = expectedToken(eventId);
-  const ok =
-    token.length === expected.length &&
-    crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected));
-  if (!ok) {
+  if (!verifyToken(token, clientToken(eventId))) {
     return send(403, fallbackPage("<h2>Invalid link</h2><p>This status link isn't valid.</p>"));
   }
 

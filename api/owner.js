@@ -4,6 +4,10 @@ import {
   syncBookingsToSheet,
   getBookingsFromSheet,
   getReviews,
+  getConversations,
+  isSecondArtistAvailable,
+  setSetting,
+  SECOND_ARTIST_KEY,
   setReviewStatus,
   getGallery,
   addGalleryImage,
@@ -22,15 +26,16 @@ import {
 } from "./_lib/clients.js";
 import { optoutToken } from "./status.js";
 import { reviewToken } from "./review.js";
+import { ownerToken } from "./_lib/tokens.js";
 
 const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
 const OWNER_PASSWORD = process.env.OWNER_DASHBOARD_PASSWORD || "";
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || "";
 
-// Per-event token for the one-click action links (same scheme as the emails).
-function eventToken(eventId) {
-  return crypto.createHmac("sha256", CONFIRM_SECRET).update(eventId).digest("hex").slice(0, 32);
-}
+// Per-event token for the dashboard's one-click action links. These hit the
+// same owner-only endpoints as the email buttons (confirm, decline, reschedule),
+// so they must be signed with the OWNER token — see api/_lib/tokens.js.
+const eventToken = ownerToken;
 
 // Session token derived from the password — stored in an HttpOnly cookie so the
 // plaintext password never lives in the browser.
@@ -565,6 +570,7 @@ function icon(name) {
     users: `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>`,
     userplus: `<path d="M15 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/>`,
     star: `<path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.6 1.1 6.45L12 17.9l-5.8 3 1.1-6.45-4.7-4.6 6.5-.95L12 2.5z"/>`,
+    chat: `<path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.5-4.4A8.4 8.4 0 0 1 3.6 11.5a8.4 8.4 0 0 1 8.4-8.4h.5a8.4 8.4 0 0 1 8.5 8.4z"/>`,
     image: `<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>`,
   }[name] || "";
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
@@ -577,6 +583,7 @@ const NAV_ITEMS = [
   ["followups", "Follow-ups", "gift"],
   ["clients", "Clients", "users"],
   ["leads", "Leads", "userplus"],
+  ["chats", "Chats", "chat"],
   ["reviews", "Reviews", "star"],
   ["gallery", "Gallery", "image"],
 ];
@@ -886,6 +893,62 @@ export function reviewsPage(reviews, base) {
   return shellPage("Reviews · Face Painting CA", appShell("reviews", content), DASHBOARD_SCRIPT);
 }
 
+// ── Chats ─────────────────────────────────────────────────────────────────────
+// Archived Sky conversations. Only chats that produced a booking or a lead are
+// kept — see the Conversations tab in api/_lib/sheets.js for why.
+function conversationCard(c) {
+  const badge =
+    c.outcome === "booking"
+      ? `<span class="pill" style="background:#e6f2e8;color:#2f6b41">Booked</span>`
+      : `<span class="pill" style="background:#fdf0e6;color:#a4552a">Lead</span>`;
+
+  const contact = [c.phone, c.email].filter(Boolean).join(" · ");
+  const lines = (c.transcript || "").split("\n").filter(Boolean);
+
+  return `<div class="card">
+      <div class="cname">${esc(c.name || "Someone")} ${badge}</div>
+      <p class="crmeta" style="margin-top:4px">${esc(c.logged)}${contact ? ` · ${esc(contact)}` : ""}</p>
+      ${c.summary ? `<p class="crmeta" style="margin-top:6px;color:#4a4740">${esc(c.summary)}</p>` : ""}
+      <div class="cactions" style="margin-top:10px">
+        <button class="btn btn-resched" data-toggle="chat-${esc(c.id)}">Read the chat</button>
+      </div>
+      <div id="chat-${esc(c.id)}" class="drawer" hidden>
+        <div style="background:#fdfbf6;border:1px solid #e7ddcc;border-radius:11px;padding:12px;margin-top:10px;max-height:420px;overflow:auto">
+          ${
+            lines.length
+              ? lines
+                  .map((line) => {
+                    const isClient = line.startsWith("Client:");
+                    const text = line.replace(/^(Client|Sky):\s*/, "");
+                    return `<div style="margin-bottom:8px">
+                        <div style="font-size:11px;font-weight:700;color:${isClient ? "#a4552a" : "#7a8b9a"};text-transform:uppercase;letter-spacing:.4px">${isClient ? "Client" : "Sky"}</div>
+                        <div style="font-size:14px;color:#3a3833;white-space:pre-wrap">${esc(text)}</div>
+                      </div>`;
+                  })
+                  .join("")
+              : `<div class="empty">No transcript saved.</div>`
+          }
+        </div>
+      </div>
+    </div>`;
+}
+
+export function chatsPage(conversations) {
+  const booked = conversations.filter((c) => c.outcome === "booking").length;
+  const leads = conversations.length - booked;
+  const content = `
+    <div class="vhead"><div><h1>Chats</h1><p class="sub">${booked} ended in a booking · ${leads} left as leads</p></div></div>
+    <p class="hint">Conversations with Sky that produced a booking or a lead. Useful for checking what a client actually asked for, and for spotting questions worth adding to your FAQ. Chats that went nowhere aren't kept, and these are worth clearing out once the season's over.</p>
+    <div class="cardgrid">
+      ${
+        conversations.length
+          ? conversations.map(conversationCard).join("")
+          : `<div class="empty fullrow">No conversations yet. They'll show up here once someone books or leaves their details with Sky.</div>`
+      }
+    </div>`;
+  return shellPage("Chats · Face Painting CA", appShell("chats", content), DASHBOARD_SCRIPT);
+}
+
 // Client-side resize (keeps uploads small + fast) then POST the image bytes.
 const GALLERY_SCRIPT = `<script>
 (function(){
@@ -946,7 +1009,35 @@ export function galleryPage(gallery) {
   return shellPage("Gallery · Face Painting CA", appShell("gallery", content), DASHBOARD_SCRIPT + GALLERY_SCRIPT);
 }
 
-export function dashboardPage(bookings, ym) {
+/**
+ * Controls whether Sky may offer a second artist. Sits on the Bookings page
+ * because it changes what she sells today, so it needs to be somewhere seen
+ * daily rather than buried in a settings screen.
+ */
+function secondArtistToggle(available) {
+  return `<div class="card fullrow" style="border-left:4px solid ${available ? "#4e9d63" : "#c9752f"}">
+      <div class="cname" style="font-size:16px">🎨 Second artist ${available ? "available" : "unavailable"}</div>
+      <p class="crmeta" style="margin-top:4px">
+        ${
+          available
+            ? "Sky can recommend a second artist (+$200) for big groups, and quote it on the spot."
+            : "Sky won't offer or quote a second artist. If a client asks for one, she'll say the team will check availability and flag it on the booking for you."
+        }
+      </p>
+      <div class="cactions" style="margin-top:12px">
+        ${actionForm(
+          "second-artist",
+          available ? "no" : "yes",
+          "bookings",
+          available ? "Turn off — I'm working solo" : "Turn on — I have a partner",
+          available ? "btn btn-cancel" : "btn btn-confirm"
+        )}
+      </div>
+      <p class="crmeta" style="margin-top:8px;font-size:12px">Takes up to a minute to reach Sky.</p>
+    </div>`;
+}
+
+export function dashboardPage(bookings, ym, secondArtistAvailable = false) {
   const today = todayPacific();
   const month = /^\d{4}-\d{2}$/.test(ym || "") ? ym : today.slice(0, 7);
   const requests = bookings.filter((b) => b.status === "RESCHEDULE REQUESTED");
@@ -980,6 +1071,7 @@ export function dashboardPage(bookings, ym) {
       ${addEventButton()}
     </div>
     ${addEventDrawer()}
+    ${secondArtistToggle(secondArtistAvailable)}
     <div class="bkgrid">
       <div class="bklist">${requestsHtml}${list}</div>
       <div class="bkcal">${calendarPanel(bookings, month)}</div>
@@ -1029,6 +1121,12 @@ async function handleAction(body, base) {
   if (body.action === "optout-owner") {
     const key = (body.key || "").trim();
     if (key) await setClientFlag(key, { optOut: true });
+    return;
+  }
+
+  // ── Second artist availability (controls what Sky may offer) ───────────────
+  if (body.action === "second-artist") {
+    await setSetting(SECOND_ARTIST_KEY, body.key === "yes" ? "yes" : "no");
     return;
   }
 
@@ -1189,6 +1287,9 @@ export default async function handler(req, res) {
     if (view === "reviews") {
       return html(200, reviewsPage(await getReviews(), base));
     }
+    if (view === "chats") {
+      return html(200, chatsPage(await getConversations()));
+    }
     if (view === "past") {
       const rows = await getBookingsFromSheet();
       const now = nowPacificStamp();
@@ -1219,7 +1320,7 @@ export default async function handler(req, res) {
     }
 
     const bookings = await listCalendarBookings();
-    return html(200, dashboardPage(bookings, params.get("ym")));
+    return html(200, dashboardPage(bookings, params.get("ym"), await isSecondArtistAvailable()));
   } catch (error) {
     console.error("Owner dashboard error:", error);
     return html(500, shellPage("Error", `<div class="login"><h1>Something went wrong</h1><p class="sub">Couldn't load the dashboard. Check the server logs.</p></div>`));
