@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import { cached } from "./cache.js";
 
 function getAuthClient() {
   const oauth2Client = new google.auth.OAuth2(
@@ -432,7 +433,7 @@ export async function upsertClient(record, { incrementBookings = false } = {}) {
 // The Sheet1 tracker keeps every booking that ever synced, including past ones
 // beyond the calendar's 30-day read window — so it's the durable archive the
 // "Past events" view reads from.
-export async function getBookingsFromSheet() {
+export const getBookingsFromSheet = cached("bookingsFromSheet", async () => {
   const client = getSheetsClient();
   if (!client) return [];
   const { sheets, sheetId } = client;
@@ -455,7 +456,7 @@ export async function getBookingsFromSheet() {
       eventId: (c[COL.EVENT_ID] || "").trim(),
     }))
     .filter((b) => b.date);
-}
+});
 
 // ── Reviews tab ───────────────────────────────────────────────────────────────
 // Client-submitted reviews land here as "pending"; the owner approves the ones
@@ -499,7 +500,7 @@ async function ensureReviewsSheet(sheets, sheetId) {
   }
 }
 
-export async function getReviews() {
+export const getReviews = cached("reviews", async () => {
   const client = getSheetsClient();
   if (!client) return [];
   const { sheets, sheetId } = client;
@@ -507,7 +508,7 @@ export async function getReviews() {
   const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: REVIEW_RANGE });
   const rows = res.data.values || [];
   return rows.slice(1).map((c, i) => rowToReview(c, i + 2)).filter((r) => r.id);
-}
+});
 
 /** Appends a new client-submitted review as "pending". Returns its id. */
 export async function addReview({ name, rating, eventType, text, key }) {
@@ -679,7 +680,7 @@ async function ensureConversationsSheet(sheets, sheetId) {
 }
 
 /** Newest first, so the dashboard shows recent chats at the top. */
-export async function getConversations() {
+export const getConversations = cached("conversations", async () => {
   const client = getSheetsClient();
   if (!client) return [];
   const { sheets, sheetId } = client;
@@ -691,7 +692,7 @@ export async function getConversations() {
     .map((c, i) => rowToConversation(c, i + 2))
     .filter((c) => c.id)
     .reverse();
-}
+});
 
 /**
  * Records a finished conversation. `messages` is the chat transcript as
@@ -777,7 +778,7 @@ async function ensureGallerySheet(sheets, sheetId) {
   }
 }
 
-export async function getGallery() {
+export const getGallery = cached("gallery", async () => {
   const client = getSheetsClient();
   if (!client) return [];
   const { sheets, sheetId } = client;
@@ -788,7 +789,7 @@ export async function getGallery() {
     .slice(1)
     .map((c, i) => ({ rowNumber: i + 2, id: (c[0] || "").trim(), url: (c[1] || "").trim(), alt: (c[2] || "").trim(), added: (c[3] || "").trim() }))
     .filter((g) => g.id && g.url);
-}
+});
 
 /** Appends an uploaded image (public Blob URL + caption). Returns its id. */
 export async function addGalleryImage({ url, alt }) {

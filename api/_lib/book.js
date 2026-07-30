@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import { cached } from './cache.js';
 
 function getAuthClient() {
   const oauth2Client = new google.auth.OAuth2(
@@ -180,7 +181,7 @@ function parseEventToBooking(e) {
  * 12 months out, as normalized booking objects. Used by the sheet sync so the
  * tracker mirrors whatever currently exists on the calendar.
  */
-export async function listCalendarBookings() {
+export const listCalendarBookings = cached('calendarBookings', async () => {
   const auth = getAuthClient();
   const calendarId = process.env.GOOGLE_CALENDAR_ID;
   const calendar = google.calendar({ version: 'v3', auth });
@@ -201,7 +202,7 @@ export async function listCalendarBookings() {
   return (result.data.items || [])
     .map(parseEventToBooking)
     .filter(Boolean);
-}
+});
 
 /**
  * Looks for a booking that already exists for this phone (or email) on this

@@ -2,6 +2,7 @@ import {
   getClients as sheetGetClients,
   upsertClient as sheetUpsertClient,
 } from "./sheets.js";
+import { cached } from "./cache.js";
 
 // The discount offered in birthday follow-ups. Editable in one place (or via the
 // BIRTHDAY_DISCOUNT env var); the owner can still tweak the wording before sending.
@@ -43,9 +44,7 @@ function phoneDigits(p) {
 
 // ── Store wrappers ────────────────────────────────────────────────────────────
 
-export async function getClients() {
-  return sheetGetClients();
-}
+export const getClients = cached("clients", () => sheetGetClients());
 
 // Computes the dedupe key from the record's phone/email if not supplied.
 export async function upsertClient(record, opts) {

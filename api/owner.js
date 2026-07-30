@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { invalidate } from "./_lib/cache.js";
 import { listCalendarBookings, createOwnerBooking, updateBooking } from "./_lib/book.js";
 import {
   syncBookingsToSheet,
@@ -84,185 +85,6 @@ async function readBody(req) {
 }
 
 // ── Rendering ────────────────────────────────────────────────────────────────
-const SERIF = "Georgia,'Iowan Old Style','Times New Roman',serif";
-const STYLE = `
-  :root{color-scheme:light}
-  *{box-sizing:border-box}
-  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:#e9e2d4;color:#2b2a28;-webkit-font-smoothing:antialiased}
-  a{color:inherit}
-
-  /* App shell */
-  .app{max-width:660px;margin:0 auto;padding:14px 12px 48px}
-  @media(min-width:900px){
-    .app{max-width:1180px;margin:26px auto;padding:0;background:#f6f0e4;border-radius:24px;overflow:hidden;box-shadow:0 14px 46px rgba(70,45,20,.10);
-      display:grid;grid-template-columns:minmax(0,1fr) 430px;grid-template-rows:auto auto 1fr;
-      grid-template-areas:"head cal" "add cal" "list cal"}
-    .a-head{grid-area:head;padding:34px 32px 0 38px}
-    .a-add{grid-area:add;padding:18px 32px 2px 38px}
-    .a-list{grid-area:list;padding:14px 32px 42px 38px}
-    .a-cal{grid-area:cal;background:#fff;border-left:1px solid #ece2d1;padding:30px 30px 34px}
-  }
-  .a-head{padding:6px 6px 0}
-  .a-add{padding:12px 6px 2px}
-  .a-cal{padding:8px 2px}
-  .a-list{padding:8px 6px 0}
-
-  h1{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:30px;font-weight:800;letter-spacing:-.5px;margin:2px 0 4px}
-  .sub{color:#a29a8b;font-size:14px;margin:0}
-  .sec{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#b0a692;margin:26px 0 12px}
-
-  /* Buttons */
-  .btn{display:inline-block;border:none;border-radius:22px;padding:9px 18px;font-size:14px;font-weight:700;text-decoration:none;cursor:pointer;font-family:inherit}
-  .btn-add{background:#b0542e;color:#fff;padding:11px 20px;border-radius:24px;font-size:15px}
-  .btn-cancel{background:#efe6d6;color:#a94e2a}
-  .btn-resched{background:#f1d8c6;color:#a94e2a}
-  .btn-confirm{background:#5f8c6b;color:#fff}
-
-  /* Header: title on the left, Add event button pinned top-right */
-  .a-head-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
-  .a-head-row .btn-add{flex-shrink:0;white-space:nowrap;margin-top:4px}
-
-  /* Cards */
-  .card{position:relative;background:#fff;border:1px solid #efe6d6;border-radius:16px;padding:20px 20px 16px;margin-bottom:14px;
-    transition:box-shadow .16s ease,border-color .16s ease}
-  .card:hover,.card.hl{border-color:#e6c4a6;box-shadow:0 8px 24px rgba(120,70,40,.13)}
-  .card.req{border-color:#eccf9a;background:#fdf8ee}
-  .crow{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
-  .cname{font-family:${SERIF};font-size:21px;font-weight:700;color:#2b2a28;line-height:1.2}
-  .cwhen{color:#7c8676;font-size:14.5px;margin-top:7px}
-  .cloc{color:#b3ab9c;font-size:14px;margin-top:4px}
-  .creq{color:#9a6a00;font-size:13.5px;margin-top:8px}
-  .badge{font-size:12px;font-weight:700;padding:5px 13px;border-radius:16px;white-space:nowrap;flex-shrink:0}
-  .b-confirmed{background:#e3ede1;color:#4c7a58}
-  .b-pending{background:#f6e6d2;color:#a9752f}
-  .b-cancelled{background:#eceae6;color:#8a8378}
-  .b-reschedule{background:#f7ead0;color:#9a6a00}
-  .cactions{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin-top:16px}
-  .cactions .spacer{flex:1}
-  .editlink{color:#a29a8b;font-size:14px;font-weight:600;text-decoration:none;cursor:pointer}
-  .editlink:hover{color:#8a8378}
-
-  /* Drawers (reschedule / edit / add forms) */
-  .drawer{margin-top:14px}
-  .drawer[hidden]{display:none}
-  .bform{display:flex;flex-direction:column;gap:9px}
-  .bform .bin,.form-row input{padding:11px 12px;border:1px solid #e7ddcc;border-radius:11px;font-size:16px;width:100%;background:#fdfbf6;font-family:inherit}
-  .bform textarea.bin{resize:vertical}
-  .form-row{display:flex;gap:8px;flex-wrap:wrap}
-  .form-row input{flex:1;min-width:120px}
-  .gcal{display:inline-block;margin-top:6px;font-size:14px;font-weight:700;color:#b0542e;text-decoration:none}
-  .empty{color:#a29a8b;text-align:center;padding:30px 0}
-
-  /* Details drawer (read-only extra info) */
-  .details{border-top:1px solid #f0e8d9;padding-top:13px}
-  .drow{display:flex;gap:12px;font-size:14.5px;margin-bottom:8px}
-  .dk{flex:0 0 62px;color:#b0a692;font-weight:700}
-  .dv{color:#4a4740;white-space:pre-wrap;word-break:break-word;min-width:0}
-  .dv a{color:#b0542e;text-decoration:none}
-  .dv a:hover{text-decoration:underline}
-  .dempty{color:#a29a8b;font-size:14px}
-
-  /* Calendar */
-  .calbox{background:#fff;border:1px solid #efe6d6;border-radius:16px;padding:18px 16px}
-  .month{max-width:400px;margin:0 auto}
-  .month.second{display:none}
-  @media(min-width:900px){ .month.second{display:block;margin-top:26px;padding-top:22px;border-top:1px solid #f0e8d9} }
-  .mnav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-  .mtitle{font-family:${SERIF};font-size:19px;font-weight:700;color:#2b2a28;flex:1;text-align:center}
-  .mtitle.left{text-align:left}
-  .marw{width:30px;height:30px;line-height:28px;text-align:center;color:#b3ab9c;text-decoration:none;font-size:20px;border-radius:8px}
-  .marw:hover{color:#b0542e;background:#f3ece0}
-  .cdow{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:11px;font-weight:700;letter-spacing:.5px;color:#b7ae9c;margin-bottom:6px}
-  .cgrid{display:grid;grid-template-columns:repeat(7,1fr);row-gap:8px}
-  .cd{display:flex;flex-direction:column;align-items:center;min-height:44px}
-  .cn{font-family:${SERIF};font-size:15px;color:#2b2a28;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:30px;border-radius:15px}
-  .cd.muted .cn{color:#cfc6b3}
-  .cd.today .cn{background:#b0542e;color:#fff}
-  .cd.hl .cn{background:#f1d8c6;color:#a94e2a}
-  .cd.today.hl .cn{background:#b0542e;color:#fff}
-  .dots{display:flex;justify-content:center;gap:3px;margin-top:3px}
-  .dot{width:5px;height:5px;border-radius:50%;background:#b0542e}
-  .cd.today .dot{background:#b0542e}
-  .callink{display:inline-block;margin-top:16px;font-size:13px;color:#b0542e;text-decoration:none}
-
-  /* ── App shell: sidebar (desktop) + content ─────────────────────────────── */
-  .shell{min-height:100vh}
-  .content{max-width:760px;margin:0 auto;padding:14px 12px calc(84px + env(safe-area-inset-bottom))}
-  .sidebar{display:none}
-  @media(min-width:900px){
-    .shell{display:grid;grid-template-columns:236px minmax(0,1fr)}
-    .sidebar{display:flex;flex-direction:column;position:sticky;top:0;align-self:start;height:100vh;
-      background:#f6f0e4;border-right:1px solid #ece2d1;padding:24px 16px}
-    .content{max-width:1120px;margin:0;padding:30px 40px 60px}
-  }
-  .brand{display:flex;align-items:center;gap:10px;padding:4px 8px 4px 6px;margin-bottom:18px}
-  .brand .bt{display:flex;flex-direction:column;font-family:${SERIF};line-height:1.05;color:#2b2a28;font-size:16px;font-weight:700}
-  .brand .bt b{font-weight:400;font-size:12px;color:#a29a8b;letter-spacing:.5px;text-transform:uppercase}
-  .sidenav{display:flex;flex-direction:column;gap:3px}
-  .sidenav a{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:12px;text-decoration:none;color:#7c7566;font-weight:700;font-size:15px}
-  .sidenav a .si{display:flex;line-height:0}
-  .sidenav a .si svg{width:20px;height:20px}
-  .sidenav a:hover{background:#efe6d6;color:#2b2a28}
-  .sidenav a.on{background:#b0542e;color:#fff}
-
-  /* View header (title + optional action) */
-  .vhead{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:14px}
-
-  /* Segmented toggle (Bookings: Upcoming/Past, Clients: Clients/Leads) */
-  .seg{display:flex;background:#efe6d6;border-radius:12px;padding:3px;margin-bottom:16px;gap:2px;max-width:340px}
-  .seg a{flex:1;text-align:center;text-decoration:none;padding:9px 10px;border-radius:9px;
-    font-size:13.5px;font-weight:700;color:#7c7566}
-  .seg a.on{background:#fff;color:#b0542e;box-shadow:0 1px 3px rgba(70,45,20,.14)}
-
-  /* Bookings two-pane + responsive card grids for the CRM views */
-  .bkgrid{display:grid;grid-template-columns:1fr;gap:22px}
-  @media(min-width:1040px){ .bkgrid{grid-template-columns:minmax(0,1fr) 400px} .bkcal{position:sticky;top:24px;align-self:start} }
-  .cardgrid{display:grid;grid-template-columns:1fr;gap:14px;align-items:start}
-  @media(min-width:760px){ .cardgrid{grid-template-columns:repeat(auto-fill,minmax(320px,1fr))} }
-  .cardgrid > .sec,.cardgrid > .fullrow{grid-column:1/-1}
-
-  /* Gallery manager */
-  .galgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
-  .galcard{position:relative;border-radius:14px;overflow:hidden;background:#fff;border:1px solid #efe6d6}
-  .galcard img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover}
-  .galcard form{position:absolute;top:8px;right:8px;margin:0}
-  .galcard .btn{padding:6px 12px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.18)}
-
-  /* Mobile app-style bottom tab bar */
-  .tabbar{display:none}
-  @media(max-width:899px){
-    .tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;background:#fff;
-      border-top:1px solid #ece2d1;box-shadow:0 -6px 22px rgba(70,45,20,.07);
-      padding:7px 2px calc(7px + env(safe-area-inset-bottom))}
-    .tabbar a{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;
-      text-decoration:none;color:#a29a8b;font-size:9.5px;font-weight:700;padding:3px 1px}
-    .tabbar a .ic{line-height:0}
-    .tabbar a .ic svg{width:23px;height:23px;display:block}
-    .tabbar a span.lbl{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .tabbar a.on{color:#b0542e}
-    .content{padding-top:calc(6px + env(safe-area-inset-top))}
-  }
-
-  /* CRM page extras */
-  .headrow{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:6px}
-  .fmeta{color:#7c8676;font-size:14.5px;margin-top:7px}
-  .fsub{color:#b3ab9c;font-size:14px;margin-top:4px}
-  .crmeta{color:#8a8378;font-size:13.5px;margin-top:4px}
-  .copybox{margin-top:12px}
-  .copybox textarea{width:100%;border:1px solid #e7ddcc;border-radius:11px;padding:11px 12px;font-size:14px;font-family:inherit;background:#fdfbf6;resize:vertical;color:#4a4740;line-height:1.5}
-  .days{font-size:12px;font-weight:700;padding:5px 12px;border-radius:16px;background:#f6e6d2;color:#a9752f;white-space:nowrap;flex-shrink:0}
-  .btn-text{background:#5f8c6b;color:#fff}
-  .btn-copy{background:#efe6d6;color:#7c5a2a}
-  .btn-plain{background:none;border:none;cursor:pointer;color:#a29a8b;font-size:13px;font-weight:600;font-family:inherit;padding:6px 4px}
-  .btn-plain:hover{color:#8a8378}
-  .hint{color:#b3ab9c;font-size:13px;margin:2px 2px 8px}
-
-  /* Login */
-  .login{max-width:360px;margin:70px auto;text-align:center;background:#f6f0e4;border-radius:20px;padding:34px 28px}
-  .login input{width:100%;padding:12px;border:1px solid #e7ddcc;border-radius:12px;font-size:16px;margin:10px 0;background:#fff}
-  .login .btn-add{width:100%}
-  .err{color:#b0402a;font-size:14px;margin-top:8px}
-`;
 
 function shellPage(title, body, script = "") {
   const head = `<meta charset="utf-8">
@@ -275,7 +97,8 @@ function shellPage(title, body, script = "") {
     <meta name="format-detection" content="telephone=no">
     <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2240%22%20fill%3D%22%23b0542e%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%2246%22%20fill%3D%22%23fff%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2279%22%20r%3D%227.5%22%20fill%3D%22%23e8836b%22%2F%3E%3Ccircle%20cx%3D%22107%22%20cy%3D%2277%22%20r%3D%227.5%22%20fill%3D%22%235f8c6b%22%2F%3E%3Ccircle%20cx%3D%22115%22%20cy%3D%22103%22%20r%3D%227.5%22%20fill%3D%22%23e2a33a%22%2F%3E%3Ccircle%20cx%3D%2280%22%20cy%3D%22113%22%20r%3D%227.5%22%20fill%3D%22%237a6cbf%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%229%22%20fill%3D%22%23f6f0e4%22%2F%3E%3C%2Fsvg%3E">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2240%22%20fill%3D%22%23b0542e%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%2246%22%20fill%3D%22%23fff%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2279%22%20r%3D%227.5%22%20fill%3D%22%23e8836b%22%2F%3E%3Ccircle%20cx%3D%22107%22%20cy%3D%2277%22%20r%3D%227.5%22%20fill%3D%22%235f8c6b%22%2F%3E%3Ccircle%20cx%3D%22115%22%20cy%3D%22103%22%20r%3D%227.5%22%20fill%3D%22%23e2a33a%22%2F%3E%3Ccircle%20cx%3D%2280%22%20cy%3D%22113%22%20r%3D%227.5%22%20fill%3D%22%237a6cbf%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%229%22%20fill%3D%22%23f6f0e4%22%2F%3E%3C%2Fsvg%3E">
-    <title>${title}</title><style>${STYLE}</style>`;
+    <link rel="stylesheet" href="/owner-dashboard.css?v=1">
+    <title>${title}</title>`;
   return `<!doctype html><html><head>${head}</head><body>${body}${script}</body></html>`;
 }
 
@@ -1187,6 +1010,7 @@ async function handleAction(body, base) {
     // Need a name and at least one contact method to key/reach them.
     if (!rec.name || !(rec.phone || rec.email)) return;
     await upsertClient(rec);
+    invalidate("clients");
     return;
   }
 
@@ -1202,13 +1026,17 @@ async function handleAction(body, base) {
     const htmlBody = birthdayPromoHtml(c, { discount: BIRTHDAY_DISCOUNT, unsubscribeUrl });
     await sendEmail({ to: c.email, subject: "A birthday treat from Face Painting California 🎂", html: htmlBody });
     await setClientFlag(key, { lastPromoSent: todayPacific() });
+    invalidate("clients");
     return;
   }
 
   // ── Owner marks a follow-up client as not interested ───────────────────────
   if (body.action === "optout-owner") {
     const key = (body.key || "").trim();
-    if (key) await setClientFlag(key, { optOut: true });
+    if (key) {
+      await setClientFlag(key, { optOut: true });
+      invalidate("clients");
+    }
     return;
   }
 
@@ -1221,14 +1049,20 @@ async function handleAction(body, base) {
   // ── Review moderation (approve / reject) ───────────────────────────────────
   if (body.action === "review-approve" || body.action === "review-reject") {
     const id = (body.key || "").trim();
-    if (id) await setReviewStatus(id, body.action === "review-approve" ? "approved" : "rejected");
+    if (id) {
+      await setReviewStatus(id, body.action === "review-approve" ? "approved" : "rejected");
+      invalidate("reviews");
+    }
     return;
   }
 
   // ── Gallery: remove a photo ────────────────────────────────────────────────
   if (body.action === "gallery-remove") {
     const id = (body.key || "").trim();
-    if (id) await removeGalleryImage(id);
+    if (id) {
+      await removeGalleryImage(id);
+      invalidate("gallery");
+    }
     return;
   }
 
@@ -1253,6 +1087,8 @@ async function handleAction(body, base) {
     await syncBookingsToSheet([booking], { markCancellations: false }).catch((e) =>
       console.error("Sheet sync (create) failed:", e)
     );
+    invalidate("calendarBookings");
+    invalidate("bookingsFromSheet");
   } else if (body.action === "edit") {
     const eventId = (body.eventId || "").trim();
     if (!eventId || !d.clientName) return;
@@ -1260,6 +1096,8 @@ async function handleAction(body, base) {
     await syncBookingsToSheet([booking], { markCancellations: false }).catch((e) =>
       console.error("Sheet sync (edit) failed:", e)
     );
+    invalidate("calendarBookings");
+    invalidate("bookingsFromSheet");
   }
 }
 
@@ -1314,6 +1152,7 @@ export default async function handler(req, res) {
         contentType: req.headers["content-type"] || "image/jpeg",
       });
       await addGalleryImage({ url: blob.url, alt: "" });
+      invalidate("gallery");
       res.statusCode = 200;
       res.setHeader("Content-Type", "application/json");
       return res.end(JSON.stringify({ url: blob.url }));
