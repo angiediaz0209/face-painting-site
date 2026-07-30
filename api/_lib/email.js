@@ -469,12 +469,7 @@ export function clientStatusHtml(b, { eventId, token } = {}) {
   </td></tr>
   ${active && !requested && b.date && b.time ? `<tr><td style="padding:22px 30px 6px;text-align:center;">${ctaButton(addToCalendarUrl(b), "Add to Calendar")}</td></tr>` : ""}
   ${addressBlock}
-  ${rescheduleBlock}
-  ${
-    eventId && token
-      ? `<tr><td style="padding:8px 30px 20px;text-align:center;"><a href="${BASE_URL}/api/status?action=receipt&eventId=${encodeURIComponent(eventId)}&token=${encodeURIComponent(token)}" style="font-size:13px;color:${MUTED};text-decoration:underline;">🖨 Print a receipt</a></td></tr>`
-      : ""
-  }`;
+  ${rescheduleBlock}`;
   return shell({ preheader: `Your booking status: ${s.title}`, inner });
 }
 
