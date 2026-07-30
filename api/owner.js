@@ -208,6 +208,12 @@ const STYLE = `
   /* View header (title + optional action) */
   .vhead{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:14px}
 
+  /* Segmented toggle (Bookings: Upcoming/Past, Clients: Clients/Leads) */
+  .seg{display:flex;background:#efe6d6;border-radius:12px;padding:3px;margin-bottom:16px;gap:2px;max-width:340px}
+  .seg a{flex:1;text-align:center;text-decoration:none;padding:9px 10px;border-radius:9px;
+    font-size:13.5px;font-weight:700;color:#7c7566}
+  .seg a.on{background:#fff;color:#b0542e;box-shadow:0 1px 3px rgba(70,45,20,.14)}
+
   /* Bookings two-pane + responsive card grids for the CRM views */
   .bkgrid{display:grid;grid-template-columns:1fr;gap:22px}
   @media(min-width:1040px){ .bkgrid{grid-template-columns:minmax(0,1fr) 400px} .bkcal{position:sticky;top:24px;align-self:start} }
@@ -572,20 +578,22 @@ function icon(name) {
     star: `<path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.6 1.1 6.45L12 17.9l-5.8 3 1.1-6.45-4.7-4.6 6.5-.95L12 2.5z"/>`,
     chat: `<path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.5-4.4A8.4 8.4 0 0 1 3.6 11.5a8.4 8.4 0 0 1 8.4-8.4h.5a8.4 8.4 0 0 1 8.5 8.4z"/>`,
     image: `<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>`,
+    grid: `<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>`,
   }[name] || "";
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
 }
 
 // ── App shell (persistent sidebar on desktop, bottom bar on mobile) ───────────
+// Past and Leads are no longer separate destinations — they're a toggle inside
+// Bookings and Clients respectively (see segToggle). Chats/Reviews/Gallery sit
+// behind "More": they're used far less often than the first three, and eight
+// items across a phone-width tab bar left each one about 34px wide with 9.5px
+// labels. Four tabs doubles that.
 const NAV_ITEMS = [
   ["bookings", "Bookings", "cal"],
-  ["past", "Past", "clock"],
-  ["followups", "Follow-ups", "gift"],
   ["clients", "Clients", "users"],
-  ["leads", "Leads", "userplus"],
-  ["chats", "Chats", "chat"],
-  ["reviews", "Reviews", "star"],
-  ["gallery", "Gallery", "image"],
+  ["followups", "Follow-ups", "gift"],
+  ["more", "More", "grid"],
 ];
 const navHref = (k) => `/api/owner${k === "bookings" ? "" : `?view=${k}`}`;
 
@@ -611,6 +619,21 @@ function tabBar(active) {
 // Wraps a view's content in the consistent shell so every tab shares one frame.
 function appShell(active, content) {
   return `<div class="shell">${sideNav(active)}<main class="content">${content}</main>${tabBar(active)}</div>`;
+}
+
+// A segmented control that's real navigation (plain links to a scope= query
+// param), not client-side state — matches every other control in this
+// dashboard, which is server-rendered throughout. items: [{ href, label, active }]
+function segToggle(items) {
+  return `<div class="seg">${items
+    .map((i) => `<a class="${i.active ? "on" : ""}" href="${i.href}">${esc(i.label)}</a>`)
+    .join("")}</div>`;
+}
+
+// Small drill-back link for the pages tucked under the "More" tab, since they
+// no longer have their own slot in the bar.
+function backToMore() {
+  return `<a href="${navHref("more")}" class="editlink" style="display:inline-block;margin-bottom:6px">‹ More</a>`;
 }
 
 // A hidden POST form reduced to a single button (used for the one-off card actions).
@@ -693,7 +716,7 @@ function clientFields(c = {}) {
     <textarea class="bin" name="notes" placeholder="Notes" rows="2">${v(c.notes)}</textarea>`;
 }
 
-function clientCard(c, base) {
+function clientCard(c, base, scope = "clients") {
   const key = esc(c.key);
   const meta = [c.phone, c.email].filter(Boolean).map(esc).join(" · ");
   const last = [shortDate(c.lastEventDate), c.lastEventType].filter(Boolean).map(esc).join(" · ");
@@ -725,6 +748,7 @@ function clientCard(c, base) {
         <input type="hidden" name="action" value="client-edit">
         <input type="hidden" name="key" value="${key}">
         <input type="hidden" name="view" value="clients">
+        ${scope === "leads" ? `<input type="hidden" name="scope" value="leads">` : ""}
         ${clientFields(c)}
         <button class="btn btn-confirm" type="submit">Save changes</button>
       </form>
@@ -732,48 +756,60 @@ function clientCard(c, base) {
   </div>`;
 }
 
-function addClientButton(view, label) {
-  return `<button class="btn btn-add" data-toggle="add-${view}">＋ ${label}</button>`;
+function addClientButton(idSuffix, label) {
+  return `<button class="btn btn-add" data-toggle="add-${idSuffix}">＋ ${label}</button>`;
 }
-function addClientDrawer(action, view) {
-  return `<div id="add-${view}" class="drawer" hidden>
+// `idSuffix` only namespaces the drawer's toggle id — the form itself always
+// posts view=clients, plus scope=leads when relevant, so it redirects back to
+// whichever half of the merged page you were adding to.
+function addClientDrawer(action, idSuffix, scope) {
+  return `<div id="add-${idSuffix}" class="drawer" hidden>
       <form method="POST" action="/api/owner" class="bform">
         <input type="hidden" name="action" value="${action}">
-        <input type="hidden" name="view" value="${view}">
+        <input type="hidden" name="view" value="clients">
+        ${scope === "leads" ? `<input type="hidden" name="scope" value="leads">` : ""}
         ${clientFields()}
         <button class="btn btn-confirm" type="submit">Save</button>
       </form>
     </div>`;
 }
 
-export function clientsPage(clients, base) {
-  const sorted = [...clients].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+// Clients and Leads are the same data (your Clients sheet, filtered by
+// source === "lead") and already shared clientCard before this merge, so this
+// is a toggle over one list rather than two separate pages.
+export function clientsPage(allClients, base, scope = "clients") {
+  const isLeads = scope === "leads";
+  const leadCount = allClients.filter((c) => c.source === "lead").length;
+  const clientCount = allClients.length - leadCount;
+  const list = isLeads ? allClients.filter((c) => c.source === "lead") : allClients;
+  const sorted = [...list].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   const rows = sorted.length
-    ? sorted.map((c) => clientCard(c, base)).join("")
+    ? sorted.map((c) => clientCard(c, base, scope)).join("")
+    : isLeads
+    ? `<div class="empty fullrow">No leads yet. Sky saves people who chat but don't book, and you can add your own.</div>`
     : `<div class="empty fullrow">No clients yet. Add the past clients you already know to start.</div>`;
-  const content = `
-    <div class="vhead">
-      <div><h1>Clients</h1><p class="sub">${sorted.length} in your CRM</p></div>
-      ${addClientButton("clients", "Add client")}
-    </div>
-    ${addClientDrawer("client-create", "clients")}
-    <div class="cardgrid">${rows}</div>`;
-  return shellPage("Clients · Face Painting CA", appShell("clients", content), DASHBOARD_SCRIPT);
-}
 
-export function leadsPage(leads) {
-  const sorted = [...leads].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  const rows = sorted.length
-    ? sorted.map(clientCard).join("")
-    : `<div class="empty fullrow">No leads yet. Sky saves people who chat but don't book, and you can add your own.</div>`;
+  const toggle = segToggle([
+    { href: navHref("clients"), label: `Clients · ${clientCount}`, active: !isLeads },
+    { href: `${navHref("clients")}&scope=leads`, label: `Leads · ${leadCount}`, active: isLeads },
+  ]);
+
   const content = `
     <div class="vhead">
-      <div><h1>Leads</h1><p class="sub">${sorted.length} to follow up</p></div>
-      ${addClientButton("leads", "Add lead")}
+      <div>
+        <h1>${isLeads ? "Leads" : "Clients"}</h1>
+        <p class="sub">${isLeads ? `${leadCount} to follow up` : `${clientCount} in your CRM`}</p>
+      </div>
+      ${addClientButton(isLeads ? "leads" : "clients", isLeads ? "Add lead" : "Add client")}
     </div>
-    ${addClientDrawer("lead-create", "leads")}
+    ${toggle}
+    ${addClientDrawer(isLeads ? "lead-create" : "client-create", isLeads ? "leads" : "clients", isLeads ? "leads" : "")}
     <div class="cardgrid">${rows}</div>`;
-  return shellPage("Leads · Face Painting CA", appShell("leads", content), DASHBOARD_SCRIPT);
+  return shellPage(
+    `${isLeads ? "Leads" : "Clients"} · Face Painting CA`,
+    appShell("clients", content),
+    DASHBOARD_SCRIPT
+  );
 }
 
 // ── Past events ───────────────────────────────────────────────────────────────
@@ -839,11 +875,16 @@ export function pastPage(past, base) {
     list += pastCard(b, base);
   }
   if (!past.length) list = `<div class="empty fullrow">No past events yet.</div>`;
+  const toggle = segToggle([
+    { href: navHref("bookings"), label: "Upcoming", active: false },
+    { href: `${navHref("bookings")}?scope=past`, label: "Past", active: true },
+  ]);
   const content = `
     <div class="vhead"><div><h1>Past events</h1><p class="sub">${past.length} completed</p></div></div>
+    ${toggle}
     <p class="hint">Events automatically move here once their time has passed. Tap Rebook to set up a repeat.</p>
     <div class="cardgrid" style="margin-top:14px">${list}</div>`;
-  return shellPage("Past · Face Painting CA", appShell("past", content), DASHBOARD_SCRIPT);
+  return shellPage("Past · Face Painting CA", appShell("bookings", content), DASHBOARD_SCRIPT);
 }
 
 // ── Reviews (moderation) ──────────────────────────────────────────────────────
@@ -883,8 +924,9 @@ export function reviewsPage(reviews, base) {
       </div>
     </div>`;
   const content = `
+    ${backToMore()}
     <div class="vhead"><div><h1>Reviews</h1><p class="sub">${pending.length} pending · ${approved.length} live on your site</p></div></div>
-    <p class="hint">Approve the ones you want public. Approved reviews show on your website. For a link personalized to one client, use “Ask for review” on the Clients or Past tab.</p>
+    <p class="hint">Approve the ones you want public. Approved reviews show on your website. For a link personalized to one client, use “Ask for review” on the Clients tab, or on a booking's card.</p>
     <div class="cardgrid">
       ${linkBox}
       <div class="sec">Pending</div>
@@ -892,7 +934,34 @@ export function reviewsPage(reviews, base) {
       <div class="sec">Live on your site</div>
       ${approved.length ? approved.map(reviewCard).join("") : `<div class="empty fullrow">No approved reviews yet.</div>`}
     </div>`;
-  return shellPage("Reviews · Face Painting CA", appShell("reviews", content), DASHBOARD_SCRIPT);
+  return shellPage("Reviews · Face Painting CA", appShell("more", content), DASHBOARD_SCRIPT);
+}
+
+// ── More (hub for the lower-frequency pages) ────────────────────────────────
+function moreLinkCard(iconName, title, sub, href) {
+  return `<a class="card" href="${href}" style="display:block;text-decoration:none;color:inherit">
+    <div class="crow">
+      <div style="display:flex;align-items:center;gap:13px;min-width:0">
+        <span style="display:flex;color:#b0542e;flex-shrink:0">${icon(iconName)}</span>
+        <div style="min-width:0">
+          <div class="cname" style="font-size:17px">${esc(title)}</div>
+          <div class="crmeta">${esc(sub)}</div>
+        </div>
+      </div>
+      <span style="color:#c9bfa9;font-size:20px;flex-shrink:0">›</span>
+    </div>
+  </a>`;
+}
+
+export function morePage() {
+  const content = `
+    <div class="vhead"><div><h1>More</h1><p class="sub">Chats, reviews, and your gallery</p></div></div>
+    <div class="cardgrid">
+      ${moreLinkCard("chat", "Chats", "Conversations that ended in a booking or a lead", navHref("chats"))}
+      ${moreLinkCard("star", "Reviews", "Moderate and share client reviews", navHref("reviews"))}
+      ${moreLinkCard("image", "Gallery", "Manage the photos on your website", navHref("gallery"))}
+    </div>`;
+  return shellPage("More · Face Painting CA", appShell("more", content), DASHBOARD_SCRIPT);
 }
 
 // ── Chats ─────────────────────────────────────────────────────────────────────
@@ -939,6 +1008,7 @@ export function chatsPage(conversations) {
   const booked = conversations.filter((c) => c.outcome === "booking").length;
   const leads = conversations.length - booked;
   const content = `
+    ${backToMore()}
     <div class="vhead"><div><h1>Chats</h1><p class="sub">${booked} ended in a booking · ${leads} left as leads</p></div></div>
     <p class="hint">Conversations with Sky that produced a booking or a lead. Useful for checking what a client actually asked for, and for spotting questions worth adding to your FAQ. Chats that went nowhere aren't kept, and these are worth clearing out once the season's over.</p>
     <div class="cardgrid">
@@ -948,7 +1018,7 @@ export function chatsPage(conversations) {
           : `<div class="empty fullrow">No conversations yet. They'll show up here once someone books or leaves their details with Sky.</div>`
       }
     </div>`;
-  return shellPage("Chats · Face Painting CA", appShell("chats", content), DASHBOARD_SCRIPT);
+  return shellPage("Chats · Face Painting CA", appShell("more", content), DASHBOARD_SCRIPT);
 }
 
 // Client-side resize (keeps uploads small + fast) then POST the image bytes.
@@ -1000,6 +1070,7 @@ export function galleryPage(gallery) {
     ? gallery.map(galleryImageCard).join("")
     : `<div class="empty fullrow">No photos yet — add your first with “Add photos”.</div>`;
   const content = `
+    ${backToMore()}
     <div class="vhead">
       <div><h1>Gallery</h1><p class="sub">${gallery.length} photo${gallery.length === 1 ? "" : "s"} on your website</p></div>
       <label class="btn btn-add" for="galup">＋ Add photos</label>
@@ -1008,7 +1079,7 @@ export function galleryPage(gallery) {
     <div id="galstatus" class="hint"></div>
     <p class="hint">Photos show in your public site's gallery. Uploads are resized automatically; tap Remove to take one down. (If uploads say storage isn't set up, enable Blob in Vercel → Storage.)</p>
     <div class="galgrid">${grid}</div>`;
-  return shellPage("Gallery · Face Painting CA", appShell("gallery", content), DASHBOARD_SCRIPT + GALLERY_SCRIPT);
+  return shellPage("Gallery · Face Painting CA", appShell("more", content), DASHBOARD_SCRIPT + GALLERY_SCRIPT);
 }
 
 /**
@@ -1064,6 +1135,11 @@ export function dashboardPage(bookings, ym, secondArtistAvailable = false) {
     ? `<div class="sec">Reschedule Requests</div>${requests.map(bookingCard).join("")}`
     : "";
 
+  const toggle = segToggle([
+    { href: navHref("bookings"), label: "Upcoming", active: true },
+    { href: `${navHref("bookings")}?scope=past`, label: "Past", active: false },
+  ]);
+
   const content = `
     <div class="vhead">
       <div>
@@ -1072,6 +1148,7 @@ export function dashboardPage(bookings, ym, secondArtistAvailable = false) {
       </div>
       ${addEventButton()}
     </div>
+    ${toggle}
     ${addEventDrawer()}
     ${secondArtistToggle(secondArtistAvailable)}
     <div class="bkgrid">
@@ -1096,8 +1173,16 @@ async function handleAction(body, base) {
       lastLocation: (body.location || "").trim(),
       birthday: (body.birthday || "").trim(),
       notes: (body.notes || "").trim(),
-      source: body.action === "lead-create" ? "lead" : "manual",
     };
+    // Only a CREATE sets the source. A plain edit leaves it out entirely, so
+    // mergeClient() falls back to whatever the record already had. The edit
+    // form is shared between Clients and Leads and always posts the same
+    // action="client-edit", so setting "manual" here unconditionally used to
+    // silently promote a lead out of the Leads list on every edit — fixing a
+    // typo in their phone number would make them vanish from follow-up.
+    if (body.action !== "client-edit") {
+      rec.source = body.action === "lead-create" ? "lead" : "manual";
+    }
     if (body.key) rec.key = String(body.key).trim(); // preserve identity on edit
     // Need a name and at least one contact method to key/reach them.
     if (!rec.name || !(rec.phone || rec.email)) return;
@@ -1261,10 +1346,14 @@ export default async function handler(req, res) {
       } catch (error) {
         console.error("Owner action error:", error);
       }
-      // Redirect so a refresh doesn't resubmit the form; return to the same view.
-      const view = /^(followups|clients|leads|past|reviews|gallery)$/.test(body.view || "") ? `?view=${body.view}` : "";
+      // Redirect so a refresh doesn't resubmit the form; return to the same
+      // view AND scope, so e.g. editing a lead lands back on the Leads toggle
+      // rather than bouncing to the Clients half of the merged page.
+      const viewOk = /^(followups|clients|reviews|gallery|more)$/.test(body.view || "") ? body.view : "";
+      const scopeOk = /^(past|leads)$/.test(body.scope || "") ? body.scope : "";
+      const qs = [viewOk && `view=${viewOk}`, scopeOk && `scope=${scopeOk}`].filter(Boolean).join("&");
       res.statusCode = 303;
-      res.setHeader("Location", `/api/owner${view}`);
+      res.setHeader("Location", `/api/owner${qs ? `?${qs}` : ""}`);
       return res.end();
     }
 
@@ -1281,6 +1370,7 @@ export default async function handler(req, res) {
   try {
     const params = new URL(req.url, "http://localhost").searchParams;
     const view = params.get("view") || "bookings";
+    const scope = params.get("scope") || "";
     const proto = req.headers["x-forwarded-proto"] || (String(req.headers.host || "").includes("localhost") ? "http" : "https");
     const base = process.env.APP_BASE_URL || `${proto}://${req.headers.host}`;
 
@@ -1293,20 +1383,13 @@ export default async function handler(req, res) {
     if (view === "chats") {
       return html(200, chatsPage(await getConversations()));
     }
-    if (view === "past") {
-      const rows = await getBookingsFromSheet();
-      const now = nowPacificStamp();
-      const past = rows
-        .filter((b) => b.status !== "CANCELLED" && isPastBooking(b, now))
-        .sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
-      return html(200, pastPage(past, base));
+    if (view === "more") {
+      return html(200, morePage());
     }
     if (view === "clients") {
-      return html(200, clientsPage(await getClients(), base));
-    }
-    if (view === "leads") {
-      const clients = await getClients();
-      return html(200, leadsPage(clients.filter((c) => c.source === "lead")));
+      // Leads is a toggle within Clients now, not a separate destination — same
+      // sheet, same card, just a filter. See clientsPage().
+      return html(200, clientsPage(await getClients(), base, scope === "leads" ? "leads" : "clients"));
     }
     if (view === "followups") {
       // Exclude clients who already have a future booking on the calendar.
@@ -1320,6 +1403,18 @@ export default async function handler(req, res) {
       );
       const followups = await listBirthdayFollowups({ clients, excludeKeys });
       return html(200, followupsPage(followups));
+    }
+
+    // Bookings, either scope. Past is a toggle here now too — same reasoning as
+    // Clients/Leads, just with a different card layout underneath (see
+    // pastPage/pastCard vs dashboardPage/bookingCard).
+    if (scope === "past") {
+      const rows = await getBookingsFromSheet();
+      const now = nowPacificStamp();
+      const past = rows
+        .filter((b) => b.status !== "CANCELLED" && isPastBooking(b, now))
+        .sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
+      return html(200, pastPage(past, base));
     }
 
     const bookings = await listCalendarBookings();
