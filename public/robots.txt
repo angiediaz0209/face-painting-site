@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /api/owner
+
+Sitemap: https://face-painting-site.vercel.app/sitemap.xml
