@@ -429,6 +429,34 @@ export async function upsertClient(record, { incrementBookings = false } = {}) {
   return merged;
 }
 
+/**
+ * Removes a client by Key. Blanks the row rather than deleting it outright —
+ * same approach as removeGalleryImage() — so there's no row-index shifting to
+ * get wrong, and getClients() already filters out any row with an empty key.
+ *
+ * This only removes the CRM record. It does NOT touch their booking on the
+ * calendar — deleting a client here has no effect on an upcoming event.
+ */
+export async function removeClient(key) {
+  const client = getSheetsClient();
+  if (!client) return false;
+  const { sheets, sheetId } = client;
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: CLIENT_RANGE });
+  const rows = res.data.values || [];
+  for (let i = 1; i < rows.length; i++) {
+    if ((rows[i][0] || "").trim() === key) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: sheetId,
+        range: `Clients!A${i + 1}:O${i + 1}`,
+        valueInputOption: "RAW",
+        requestBody: { values: [Array(CLIENT_HEADERS.length).fill("")] },
+      });
+      return true;
+    }
+  }
+  return false;
+}
+
 // ── Booking history (read the tracker) ────────────────────────────────────────
 // The Sheet1 tracker keeps every booking that ever synced, including past ones
 // beyond the calendar's 30-day read window — so it's the durable archive the

@@ -1,6 +1,7 @@
 import {
   getClients as sheetGetClients,
   upsertClient as sheetUpsertClient,
+  removeClient as sheetRemoveClient,
 } from "./sheets.js";
 import { cached } from "./cache.js";
 
@@ -51,6 +52,11 @@ export async function upsertClient(record, opts) {
   const key = record.key || normalizeKey(record);
   if (!key) return null;
   return sheetUpsertClient({ ...record, key }, opts);
+}
+
+export async function removeClient(key) {
+  if (!key) return false;
+  return sheetRemoveClient(key);
 }
 
 // Targeted flag update (opt-out, last-promo-sent) — merges onto the existing row.

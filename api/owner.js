@@ -18,6 +18,7 @@ import { fmtTimeRange, birthdayPromoHtml, sendEmail } from "./_lib/email.js";
 import {
   getClients,
   upsertClient,
+  removeClient,
   setClientFlag,
   listBirthdayFollowups,
   normalizeKey,
@@ -381,6 +382,16 @@ const DASHBOARD_SCRIPT = `<script>
     e.preventDefault();
     var el=document.getElementById(t.getAttribute('data-toggle')); if(el) el.hidden=!el.hidden;
   });
+  // A form with data-confirm="message" asks before submitting (used for
+  // destructive actions like deleting a client). Reading the message via
+  // getAttribute rather than embedding it in an inline onsubmit avoids
+  // needing to hand-escape quotes into a JS string literal server-side —
+  // a real bug caught here: an apostrophe in the message broke the inline
+  // JS and would have skipped the confirmation entirely.
+  document.addEventListener('submit',function(e){
+    var msg=e.target.getAttribute('data-confirm');
+    if(msg && !confirm(msg)) e.preventDefault();
+  });
   function all(s){return Array.prototype.slice.call(document.querySelectorAll(s));}
   var cards=all('.card[data-date]'), days=all('.cd[data-date]');
   function hl(date,on){
@@ -570,6 +581,14 @@ function clientCard(c, base, scope = "clients") {
       ${askReviewControls(base, { key: c.key, name: c.name, phone: c.phone })}
       <span class="spacer"></span>
       <a class="editlink" href="#" data-toggle="ec-${key}">Edit</a>
+      <form method="POST" action="/api/owner" style="display:inline"
+        data-confirm="${esc(`Delete this ${scope === "leads" ? "lead" : "client"} from your list? This does not cancel any of their bookings on the calendar. This can't be undone.`)}">
+        <input type="hidden" name="action" value="client-delete">
+        <input type="hidden" name="key" value="${key}">
+        <input type="hidden" name="view" value="clients">
+        ${scope === "leads" ? `<input type="hidden" name="scope" value="leads">` : ""}
+        <button class="btn-plain" type="submit" style="color:#a94e2a;">Delete</button>
+      </form>
     </div>
     <div id="ec-${key}" class="drawer" hidden>
       <form method="POST" action="/api/owner" class="bform">
@@ -1016,6 +1035,18 @@ async function handleAction(body, base) {
     if (!rec.name || !(rec.phone || rec.email)) return;
     await upsertClient(rec);
     invalidate("clients");
+    return;
+  }
+
+  // ── Delete a client or lead. Removes the CRM record only — never touches
+  // their booking on the calendar, so an upcoming event is unaffected. The
+  // client confirms this in a real dialog before the form ever submits.
+  if (body.action === "client-delete") {
+    const key = (body.key || "").trim();
+    if (key) {
+      await removeClient(key);
+      invalidate("clients");
+    }
     return;
   }
 
