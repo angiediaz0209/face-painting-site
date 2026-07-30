@@ -339,6 +339,7 @@ function mergeClient(existing, incoming, incrementBookings) {
     lastPromoSent: pick(incoming.lastPromoSent, e.lastPromoSent),
     firstSeen: e.firstSeen || nowStamp(),
     notes: pick(incoming.notes, e.notes),
+    organization: pick(incoming.organization, e.organization),
   };
 }
 
@@ -408,7 +409,10 @@ export async function upsertClient(record, { incrementBookings = false } = {}) {
   if (existing) {
     await sheets.spreadsheets.values.update({
       spreadsheetId: sheetId,
-      range: `Clients!A${existing.rowNumber}:N${existing.rowNumber}`,
+      // Must span every column CLIENT_HEADERS defines (A:O) — a range one
+      // column short here silently truncates the last field on every update
+      // instead of erroring, which is how Organization went missing.
+      range: `Clients!A${existing.rowNumber}:O${existing.rowNumber}`,
       valueInputOption: "RAW",
       requestBody: { values: [row] },
     });

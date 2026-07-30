@@ -682,6 +682,8 @@ function clientFields(c = {}) {
     <input class="bin" type="tel" name="clientPhone" placeholder="Phone" value="${v(c.phone)}">
     <input class="bin" type="email" name="clientEmail" placeholder="Email" value="${v(c.email)}">
     <div class="hint">Enter at least a phone or an email so we can recognize and reach them.</div>
+    <input class="bin" type="text" name="organization" placeholder="School or company (optional)" value="${v(c.organization)}">
+    <div class="hint">Set this so Sky recognizes the school or company again next time, even if a different person books.</div>
     <input class="bin" type="text" name="eventType" placeholder="Last event type (e.g. Birthday Party)" value="${v(c.lastEventType)}">
     <div class="form-row">
       <input type="date" name="lastEventDate" value="${v(c.lastEventDate)}">
@@ -704,7 +706,7 @@ function clientCard(c, base) {
       : "";
   return `<div class="card">
     <div class="crow">
-      <div class="cname">${esc(c.name || "—")}</div>
+      <div class="cname">${esc(c.name || "—")}${c.organization ? ` <span style="font-weight:400;color:#a4552a">· ${esc(c.organization)}</span>` : ""}</div>
       <div>${tags.join(" ")}</div>
     </div>
     ${meta ? `<div class="crmeta">${meta}</div>` : ""}
@@ -1088,6 +1090,7 @@ async function handleAction(body, base) {
       name: (body.clientName || "").trim(),
       phone: (body.clientPhone || "").trim(),
       email: (body.clientEmail || "").trim(),
+      organization: (body.organization || "").trim(),
       lastEventType: (body.eventType || "").trim(),
       lastEventDate: (body.lastEventDate || "").trim(),
       lastLocation: (body.location || "").trim(),
