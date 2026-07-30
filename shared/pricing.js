@@ -23,8 +23,11 @@ function normalize(s) {
   return (s || "").toLowerCase().replace(/[.,]/g, " ").replace(/\s+/g, " ").trim();
 }
 
-// Maps a free-text city to a service area, or null if out of area.
-function resolveArea(cityRaw) {
+// Maps a free-text city to a service area, or null if out of area. Exported
+// so the same-day timing check (api/_lib/book.js) can classify locations the
+// exact same way Sky's quoting already does, instead of a second town list
+// drifting out of sync with this one.
+export function resolveArea(cityRaw) {
   const c = normalize(cityRaw);
   if (!c) return null;
   if (c.includes("santa rosa")) return "Santa Rosa";

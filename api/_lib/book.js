@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { cached } from './cache.js';
+import { resolveArea } from '../../shared/pricing.js';
 
 function getAuthClient() {
   const oauth2Client = new google.auth.OAuth2(
@@ -14,9 +15,19 @@ function getAuthClient() {
 
 /**
  * Checks Google Calendar for existing events on a given date.
- * Returns whether the date is available or has conflicts.
+ *
+ * Called two ways by Sky:
+ *  - date only, early in the conversation: `available` is whether the day is
+ *    completely empty. A day with an existing event is NOT automatically a
+ *    dead end anymore, existingEvents.length > 0 just means Sky should gather
+ *    the candidate time and location and call this again with those, to get
+ *    a real same-day timing verdict instead of assuming the day is full.
+ *  - date + startTime + endTime + location, once known: `available` reflects
+ *    the real timing check (assessSameDayTiming) — false only when the times
+ *    actually overlap another booking, since 'tight'/'urgent' gaps are still
+ *    bookable (as a flagged pending booking), just not a clean yes.
  */
-export async function checkAvailability({ date }) {
+export async function checkAvailability({ date, startTime, endTime, location }) {
   const auth = getAuthClient();
   const calendarId = process.env.GOOGLE_CALENDAR_ID;
   const calendar = google.calendar({ version: 'v3', auth });
@@ -33,16 +44,31 @@ export async function checkAvailability({ date }) {
   });
 
   const events = result.data.items || [];
-  const hasConflict = events.length > 0;
+  const existingEvents = events.map((e) => ({
+    summary: e.summary,
+    start: e.start.dateTime || e.start.date,
+    end: e.end.dateTime || e.end.date,
+    location: e.location || '',
+  }));
+
+  if (startTime && endTime) {
+    const timing = await assessSameDayTiming({ date, startTime, endTime, location });
+    return {
+      available: timing.status !== 'overlap',
+      date,
+      existingEvents,
+      timing,
+    };
+  }
 
   return {
-    available: !hasConflict,
+    available: events.length === 0,
     date,
-    existingEvents: events.map(e => ({
-      summary: e.summary,
-      start: e.start.dateTime || e.start.date,
-      end: e.end.dateTime || e.end.date,
-    })),
+    existingEvents,
+    note:
+      events.length > 0
+        ? 'This day already has another booking, but it may still be bookable. Get the candidate start time, end time, and location, then call check_availability again with those to get a real same-day timing verdict instead of assuming the day is full.'
+        : undefined,
   };
 }
 
@@ -179,6 +205,108 @@ function parseEventToBooking(e) {
     occasion: descField(description, 'Occasion'),
     htmlLink: e.htmlLink || '',
   };
+}
+
+// Same-day timing buffer, in minutes. One artist needs SETUP_TEARDOWN_MIN to
+// pack up and set up again regardless of distance, plus drive time on top of
+// that, longer when the two events cross between service areas (Marin, San
+// Francisco, Santa Rosa) than when they're in the same one.
+const SETUP_TEARDOWN_MIN = 30;
+const SAME_AREA_DRIVE_MIN = 30;
+const CROSSING_AREA_DRIVE_MIN = 60;
+const COMFORTABLE_SAME_AREA_MIN = SETUP_TEARDOWN_MIN + SAME_AREA_DRIVE_MIN; // 60
+const COMFORTABLE_CROSSING_AREA_MIN = SETUP_TEARDOWN_MIN + CROSSING_AREA_DRIVE_MIN; // 90
+// Below this, even a same-area hop isn't realistic; treated as 'urgent' rather
+// than 'tight'. Below 0 (the times actually overlap) it's 'overlap' instead,
+// which is a hard stop, not a timing judgment call.
+const URGENT_FLOOR_MIN = 15;
+
+function toMinutesOfDay(hhmm) {
+  const [h, m] = String(hhmm || '').split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  return h * 60 + m;
+}
+
+/**
+ * Compares a candidate booking's date/time/location against every other real
+ * booking already on the calendar that day, and classifies how much of a
+ * travel buffer is left. Used both by Sky (before she books, and again to
+ * decide what to tell the client) and by the owner dashboard (as a warning,
+ * never a block, when adding a booking manually).
+ *
+ * Returns the WORST case across every other booking that day:
+ *   - 'clear'   comfortable gap, nothing worth mentioning
+ *   - 'tight'   real but short gap (>= 15 min, under the comfortable buffer)
+ *   - 'urgent'  under 15 minutes; still sequential, but needs a fast answer
+ *   - 'overlap' the times actually overlap — not a timing judgment, just impossible for one artist
+ *
+ * needsLocationClarification is true when the NEW booking's own location
+ * didn't resolve to Marin/SF/Santa Rosa and another booking exists that day,
+ * so the area comparison defaulted to the more conservative crossing-area
+ * buffer rather than a real answer.
+ */
+export async function assessSameDayTiming({ date, startTime, endTime, location, excludeEventId }) {
+  const auth = getAuthClient();
+  const calendarId = process.env.GOOGLE_CALENDAR_ID;
+  const calendar = google.calendar({ version: 'v3', auth });
+
+  const result = await calendar.events.list({
+    calendarId,
+    timeMin: `${date}T00:00:00-08:00`,
+    timeMax: `${date}T23:59:59-08:00`,
+    singleEvents: true,
+    orderBy: 'startTime',
+  });
+
+  const others = (result.data.items || [])
+    .filter((e) => e.id !== excludeEventId)
+    .map(parseEventToBooking)
+    .filter(Boolean);
+
+  const clear = { status: 'clear', gapMinutes: null, needsLocationClarification: false };
+  if (!others.length) return clear;
+
+  const newArea = resolveArea(location);
+  const newStart = toMinutesOfDay(startTime);
+  const newEnd = toMinutesOfDay(endTime);
+  if (newStart == null || newEnd == null) return clear;
+
+  const rank = { clear: 0, tight: 1, urgent: 2, overlap: 3 };
+  let worst = { status: 'clear', gapMinutes: Infinity, needsLocationClarification: false };
+
+  for (const other of others) {
+    const [otherStartRaw, otherEndRaw] = (other.time || '').split(' - ');
+    const otherStart = toMinutesOfDay(otherStartRaw);
+    const otherEnd = toMinutesOfDay(otherEndRaw || otherStartRaw);
+    if (otherStart == null || otherEnd == null) continue; // no usable time to compare against
+
+    let gap;
+    if (newStart < otherEnd && otherStart < newEnd) {
+      gap = -1; // literal overlap
+    } else if (newStart >= otherEnd) {
+      gap = newStart - otherEnd; // new booking is after this one
+    } else {
+      gap = otherStart - newEnd; // new booking is before this one
+    }
+
+    const otherArea = resolveArea(other.location);
+    const sameArea = newArea && otherArea && newArea === otherArea;
+    const comfortable = sameArea ? COMFORTABLE_SAME_AREA_MIN : COMFORTABLE_CROSSING_AREA_MIN;
+
+    let status;
+    if (gap < 0) status = 'overlap';
+    else if (gap < URGENT_FLOOR_MIN) status = 'urgent';
+    else if (gap < comfortable) status = 'tight';
+    else status = 'clear';
+
+    const needsLocationClarification = !newArea && status !== 'clear';
+
+    if (rank[status] > rank[worst.status] || (rank[status] === rank[worst.status] && gap < worst.gapMinutes)) {
+      worst = { status, gapMinutes: gap, needsLocationClarification };
+    }
+  }
+
+  return worst;
 }
 
 /**
@@ -559,6 +687,16 @@ export async function createOwnerBooking(d) {
 
   const endTime = d.endTime || fromMin(toMin(d.startTime) + 120);
 
+  // Unlike Sky, the owner always gets final say — this is a warning surfaced
+  // to the caller, never a block, even for a literal overlap. You might know
+  // something the system doesn't (a correction, a helper covering it).
+  const timing = await assessSameDayTiming({
+    date: d.date,
+    startTime: d.startTime,
+    endTime,
+    location: d.location || '',
+  });
+
   const event = {
     summary: `Face Painting - ${d.clientName}${d.eventType ? ` (${d.eventType})` : ''}`,
     description: buildBookingDescription(d, 'Added by the team'),
@@ -573,7 +711,7 @@ export async function createOwnerBooking(d) {
     resource: event,
     sendUpdates: 'none',
   });
-  return parseEventToBooking(created);
+  return { ...parseEventToBooking(created), timingWarning: timing.status !== 'clear' ? timing : null };
 }
 
 /**
@@ -704,6 +842,16 @@ export async function createBooking(bookingData) {
     .filter(Boolean)
     .join(' · ');
 
+  // Same-day timing check against any other real booking that day. A literal
+  // overlap is a hard stop, not a judgment call, no artist confirmation makes
+  // one person able to be in two places at the same minute.
+  const timing = await assessSameDayTiming({ date, startTime, endTime, location });
+  if (timing.status === 'overlap') {
+    const err = new Error('That time overlaps another booking on the same day.');
+    err.code = 'OVERLAP';
+    throw err;
+  }
+
   // Each becomes its own line in the calendar event, so the artist can scan it
   // rather than dig through a paragraph of notes.
   const detailLines = [
@@ -721,6 +869,11 @@ export async function createBooking(bookingData) {
     details.paperworkRequest
       ? `⚠️ PAPERWORK NEEDED: ${details.paperworkRequest} — sort before the event`
       : '',
+    timing.status === 'urgent'
+      ? `🚨 URGENT TIMING: only ~${timing.gapMinutes} min against another booking the same day. Needs a fast answer.`
+      : timing.status === 'tight'
+        ? `⏱ TIGHT TIMING: ~${timing.gapMinutes} min against another booking the same day. Confirm this is workable.`
+        : '',
   ].filter(Boolean);
 
   const auth = getAuthClient();
@@ -799,6 +952,7 @@ export async function createBooking(bookingData) {
     summary: event.summary,
     start: startDateTime,
     end: endDateTime,
+    timingStatus: timing.status,
   };
 }
 

@@ -957,8 +957,17 @@ function secondArtistToggle(available) {
     </div>`;
 }
 
-export function dashboardPage(bookings, ym, secondArtistAvailable = false) {
+const TIMING_WARNINGS = {
+  overlap: "⚠️ This actually overlaps another booking's time on the same day. One artist can't be two places at once, double check this is really what you want.",
+  urgent: "⚠️ Tight fit: under 15 minutes against another booking the same day. Cutting it close.",
+  tight: "⚠️ Tight fit: not a lot of breathing room against another booking the same day. Worth a second look.",
+};
+
+export function dashboardPage(bookings, ym, secondArtistAvailable = false, warn = "") {
   const today = todayPacific();
+  const warnBanner = TIMING_WARNINGS[warn]
+    ? `<div class="empty" style="background:#fdf0e6;color:#a4552a;border-radius:11px;padding:12px 16px;margin-bottom:14px">${TIMING_WARNINGS[warn]}</div>`
+    : "";
   const month = /^\d{4}-\d{2}$/.test(ym || "") ? ym : today.slice(0, 7);
   const requests = bookings.filter((b) => b.status === "RESCHEDULE REQUESTED");
   const upcoming = bookings
@@ -995,6 +1004,7 @@ export function dashboardPage(bookings, ym, secondArtistAvailable = false) {
       </div>
       ${addEventButton()}
     </div>
+    ${warnBanner}
     ${toggle}
     ${addEventDrawer()}
     ${secondArtistToggle(secondArtistAvailable)}
@@ -1125,6 +1135,9 @@ async function handleAction(body, base) {
     );
     invalidate("calendarBookings");
     invalidate("bookingsFromSheet");
+    // Never blocks the save (you get final say), just flagged back so the
+    // redirect can show you a heads up about same-day timing.
+    if (booking.timingWarning) return { warn: booking.timingWarning.status };
   } else if (body.action === "edit") {
     const eventId = (body.eventId || "").trim();
     if (!eventId || !d.clientName) return;
@@ -1216,8 +1229,9 @@ export default async function handler(req, res) {
       if (!isAuthed(req)) return html(200, loginPage("Please sign in again."));
       const proto = req.headers["x-forwarded-proto"] || (String(req.headers.host || "").includes("localhost") ? "http" : "https");
       const base = `${proto}://${req.headers.host}`;
+      let actionResult;
       try {
-        await handleAction(body, base);
+        actionResult = await handleAction(body, base);
       } catch (error) {
         console.error("Owner action error:", error);
       }
@@ -1226,7 +1240,10 @@ export default async function handler(req, res) {
       // rather than bouncing to the Clients half of the merged page.
       const viewOk = /^(followups|clients|reviews|gallery|more)$/.test(body.view || "") ? body.view : "";
       const scopeOk = /^(past|leads)$/.test(body.scope || "") ? body.scope : "";
-      const qs = [viewOk && `view=${viewOk}`, scopeOk && `scope=${scopeOk}`].filter(Boolean).join("&");
+      const warnOk = /^(tight|urgent|overlap)$/.test(actionResult?.warn || "") ? actionResult.warn : "";
+      const qs = [viewOk && `view=${viewOk}`, scopeOk && `scope=${scopeOk}`, warnOk && `warn=${warnOk}`]
+        .filter(Boolean)
+        .join("&");
       res.statusCode = 303;
       res.setHeader("Location", `/api/owner${qs ? `?${qs}` : ""}`);
       return res.end();
@@ -1293,7 +1310,7 @@ export default async function handler(req, res) {
     }
 
     const bookings = await listCalendarBookings();
-    return html(200, dashboardPage(bookings, params.get("ym"), await isSecondArtistAvailable()));
+    return html(200, dashboardPage(bookings, params.get("ym"), await isSecondArtistAvailable(), params.get("warn")));
   } catch (error) {
     console.error("Owner dashboard error:", error);
     return html(500, shellPage("Error", `<div class="login"><h1>Something went wrong</h1><p class="sub">Couldn't load the dashboard. Check the server logs.</p></div>`));

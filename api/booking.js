@@ -282,6 +282,12 @@ async function handleSubmit(req, res) {
   try {
     bookingResult = await createBooking(bookingInput);
   } catch (error) {
+    if (error?.code === "OVERLAP") {
+      return json(res, 409, {
+        error:
+          "That exact time overlaps another booking we already have that day. Please pick a different time, or text us at 415-991-9374 and we'll help find one.",
+      });
+    }
     console.error("Booking error:", error);
     return json(res, 500, {
       error:

@@ -65,13 +65,25 @@ function pickDetails(input = {}) {
 const AVAILABILITY_TOOL = {
   name: "check_availability",
   description:
-    "Checks Google Calendar for existing events on a specific date. Use this BEFORE creating a booking to check if the date is available. Returns whether the date is free or has existing events.",
+    "Checks Google Calendar for existing events on a specific date. Call it with just the date early on. A day with an existing event is NOT automatically full, more than one booking a day is fine as long as there's enough time between them. Once you know the candidate start time, end time, and city, call this AGAIN with those filled in too. That returns a `timing` field: 'clear' (say nothing, proceed normally), 'tight' or 'urgent' (mention it's a bit tight with another event that day, in your own words, then keep going, book it as usual, the team will confirm), or 'overlap' (that exact time will not work that day, ask for a different time instead, do not try to book it). If timing.needsLocationClarification is true, ask the client what city or neighborhood the event is in before relying on the result.",
   input_schema: {
     type: "object",
     properties: {
       date: {
         type: "string",
         description: "Date to check in YYYY-MM-DD format (e.g. 2026-04-15)",
+      },
+      startTime: {
+        type: "string",
+        description: "Candidate event start time, HH:MM 24-hour format. Include once known, along with endTime and location, for a real same-day timing check.",
+      },
+      endTime: {
+        type: "string",
+        description: "Candidate event end time, HH:MM 24-hour format.",
+      },
+      location: {
+        type: "string",
+        description: "Candidate event city, e.g. San Rafael, San Francisco, Santa Rosa.",
       },
     },
     required: ["date"],
@@ -582,6 +594,13 @@ async function handleToolUse(toolUse, ctx = {}) {
         }).catch((err) => console.error("Conversation log error:", err)),
       ]);
 
+      const timingNote =
+        bookingResult.timingStatus === "urgent"
+          ? " Heads up: this is very tight against another booking the same day, so mention to the client the team will need to confirm quickly."
+          : bookingResult.timingStatus === "tight"
+            ? " Heads up: this is a bit tight against another booking the same day, so let the client know the team will confirm it works."
+            : "";
+
       return {
         type: "tool_result",
         tool_use_id: toolUse.id,
@@ -589,11 +608,23 @@ async function handleToolUse(toolUse, ctx = {}) {
           success: true,
           pending: isPending,
           message: isPending
-            ? `Pending booking created for ${bookingResult.summary}, Date: ${bookingResult.start}. The team will review and confirm with the client by text at ${bookingInput.clientPhone}.`
+            ? `Pending booking created for ${bookingResult.summary}, Date: ${bookingResult.start}. The team will review and confirm with the client by text at ${bookingInput.clientPhone}.${timingNote}`
             : `Booking confirmed! Event: ${bookingResult.summary}, Date: ${bookingResult.start}. Calendar invite sent to ${bookingInput.clientEmail}.`,
         }),
       };
     } catch (error) {
+      if (error?.code === "OVERLAP") {
+        return {
+          type: "tool_result",
+          tool_use_id: toolUse.id,
+          content: JSON.stringify({
+            success: false,
+            reason: "overlap",
+            message:
+              "That exact time overlaps another booking already on the calendar that day. Do not create this booking. Tell the client that specific time isn't available that day, and ask if a different time or date would work instead.",
+          }),
+        };
+      }
       console.error("Booking error:", error);
       return {
         type: "tool_result",

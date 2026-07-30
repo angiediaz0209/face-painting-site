@@ -75,7 +75,13 @@ export async function sendBookingNotification(bookingInput, bookingResult) {
   }
 
   const status = bookingResult.pending ? "Pending" : "Confirmed";
-  const subject = `${bookingResult.pending ? "⚠️" : "✅"} New booking: ${
+  const timingPrefix =
+    bookingResult.timingStatus === "urgent"
+      ? "🚨 URGENT (tight same-day timing) — "
+      : bookingResult.timingStatus === "tight"
+        ? "⏱ Tight same-day timing — "
+        : "";
+  const subject = `${timingPrefix}${bookingResult.pending ? "⚠️" : "✅"} New booking: ${
     bookingInput.clientName
   }, ${bookingInput.date} (${status})`;
 
