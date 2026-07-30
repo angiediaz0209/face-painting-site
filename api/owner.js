@@ -27,7 +27,7 @@ import {
 } from "./_lib/clients.js";
 import { optoutToken } from "./status.js";
 import { reviewToken } from "./review.js";
-import { ownerToken } from "./_lib/tokens.js";
+import { ownerToken, clientToken } from "./_lib/tokens.js";
 
 const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
 const OWNER_PASSWORD = process.env.OWNER_DASHBOARD_PASSWORD || "";
@@ -200,14 +200,19 @@ function detailsInner(b) {
   const gcal = b.htmlLink
     ? `<a class="gcal" href="${esc(b.htmlLink)}" target="_blank" rel="noopener">📅 Open in Google Calendar</a>`
     : "";
+  // Same page the client can reach from their own status email — useful when a
+  // school or company calls asking for something to file for reimbursement.
+  const receipt = b.eventId
+    ? `<a class="gcal" href="/api/status?action=receipt&eventId=${encodeURIComponent(b.eventId)}&token=${clientToken(b.eventId)}" target="_blank" rel="noopener" style="margin-left:16px;">🖨 Print receipt</a>`
+    : "";
 
   if (!rows.length) {
-    return `<div class="details"><div class="dempty">No extra details on file.</div>${gcal}</div>`;
+    return `<div class="details"><div class="dempty">No extra details on file.</div>${gcal}${receipt}</div>`;
   }
   const list = rows
     .map(([k, v, fmt]) => `<div class="drow"><span class="dk">${k}</span><span class="dv">${fmt ? fmt(v) : esc(v)}</span></div>`)
     .join("");
-  return `<div class="details">${list}${gcal}</div>`;
+  return `<div class="details">${list}${gcal}${receipt}</div>`;
 }
 
 function editFormInner(b) {

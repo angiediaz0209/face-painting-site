@@ -13,6 +13,11 @@ function getAuthClient() {
 
 // ── Brand ───────────────────────────────────────────────────────────────────
 const FROM_NAME = "Face Painting California";
+// Links and form actions inside emailed HTML must be absolute: some webmail
+// clients render the message inside their own origin, so a relative URL like
+// action="/api/status" can silently resolve against mail.google.com instead
+// of this site, and the form just 404s there instead of reaching the server.
+const BASE_URL = process.env.APP_BASE_URL || "https://face-painting-site.vercel.app";
 const BUSINESS_PHONE = "(415) 991-9374";
 const SMS_NUMBER = "4159919374";
 const BUSINESS_EMAIL = "steff.diaz0209@gmail.com"; // display only
@@ -412,7 +417,7 @@ export function clientStatusHtml(b, { eventId, token } = {}) {
             ? `<p style="font-size:13px;color:${BODY};line-height:1.6;text-align:center;margin:0 0 14px;">We don't have an address yet. Send it whenever you have it, even the name of the park is enough to get us started.</p>`
             : ""
         }
-        <form method="POST" action="/api/status?action=address">
+        <form method="POST" action="${BASE_URL}/api/status?action=address">
           <input type="hidden" name="eventId" value="${esc(eventId)}">
           <input type="hidden" name="token" value="${esc(token)}">
           <input type="text" name="location" required placeholder="Address, park or venue name"
@@ -433,7 +438,7 @@ export function clientStatusHtml(b, { eventId, token } = {}) {
       <summary style="font-size:13px;color:${MUTED};text-decoration:underline;cursor:pointer;">Need to change your date?</summary>
       <div style="max-width:360px;margin:14px auto 0;text-align:left;">
         <p style="font-size:12px;color:${MUTED};line-height:1.6;text-align:center;margin:0 0 14px;">We hold your artist and turn away other bookings for your date, so please reschedule only if you need to.</p>
-        <form method="POST" action="/api/reschedule-request">
+        <form method="POST" action="${BASE_URL}/api/reschedule-request">
           <input type="hidden" name="eventId" value="${esc(eventId)}">
           <input type="hidden" name="token" value="${esc(token)}">
           <label style="display:block;font-size:13px;color:${BODY};margin-bottom:10px;">New date<br>
@@ -464,8 +469,129 @@ export function clientStatusHtml(b, { eventId, token } = {}) {
   </td></tr>
   ${active && !requested && b.date && b.time ? `<tr><td style="padding:22px 30px 6px;text-align:center;">${ctaButton(addToCalendarUrl(b), "Add to Calendar")}</td></tr>` : ""}
   ${addressBlock}
-  ${rescheduleBlock}`;
+  ${rescheduleBlock}
+  ${
+    eventId && token
+      ? `<tr><td style="padding:8px 30px 20px;text-align:center;"><a href="${BASE_URL}/api/status?action=receipt&eventId=${encodeURIComponent(eventId)}&token=${encodeURIComponent(token)}" style="font-size:13px;color:${MUTED};text-decoration:underline;">🖨 Print a receipt</a></td></tr>`
+      : ""
+  }`;
   return shell({ preheader: `Your booking status: ${s.title}`, inner });
+}
+
+// ── 4b. Printable receipt (schools/companies often need one on file) ─────────
+// Deliberately built as a plain formal document rather than reusing the
+// colorful email shell — a school submitting this for reimbursement or a
+// company filing it with accounting expects something that reads as a
+// receipt, not a marketing email. `b` is a normalized booking (see
+// parseEventToBooking); `token` is only used to build the "view online" link.
+function receiptTodayPacific() {
+  const iso = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  return fmtDate(iso);
+}
+
+const RECEIPT_STATUS = {
+  CONFIRMED: { label: "Confirmed", color: GREEN, note: "Balance due on the day of the event. Thank you for choosing Face Painting California!" },
+  PENDING: { label: "Pending — not yet confirmed", color: CORAL_RED, note: "This is a summary of a pending request. It is not a confirmed booking — you'll receive a separate confirmation once our team approves it." },
+  "RESCHEDULE REQUESTED": { label: "Reschedule requested", color: CORAL_RED, note: "A new date has been requested for this booking and is awaiting confirmation. Balance due on the day of the event once confirmed." },
+  CANCELLED: { label: "Cancelled", color: MUTED, note: "This booking was cancelled. No amount is due." },
+};
+
+export function receiptHtml(b) {
+  const status = (b.status || "PENDING").toUpperCase();
+  const s = RECEIPT_STATUS[status] || RECEIPT_STATUS.PENDING;
+  const eid = (b.eventId || "").replace(/[^a-zA-Z0-9]/g, "");
+  const receiptNo = (eid.slice(-8) || "000000").toUpperCase();
+
+  const billedTo = b.organization
+    ? `<strong>${esc(b.organization)}</strong><br>Attn: ${esc(b.client || "")}`
+    : `<strong>${esc(b.client || "")}</strong>`;
+  const contactLines = [b.email, b.phone].filter(Boolean).map(esc).join("<br>");
+
+  const eventLine = [b.eventType, b.occasion].filter(Boolean).join(" — ");
+  const whenLine = [fmtDate(b.date), fmtTimeRange(b.time)].filter(Boolean).join(", ");
+
+  const description = [
+    b.eventType || "Face painting",
+    b.guests ? `${b.guests} guests` : "",
+  ]
+    .filter(Boolean)
+    .join(" — ");
+
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Receipt — Face Painting California</title>
+<style>
+  @page{margin:0.6in}
+  *{box-sizing:border-box}
+  body{margin:0;background:${PAGE};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:${INK};padding:32px 16px}
+  .toolbar{max-width:640px;margin:0 auto 14px;text-align:right}
+  .toolbar button{background:${CORAL};color:#fff;border:none;padding:10px 20px;border-radius:22px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit}
+  .paper{max-width:640px;margin:0 auto;background:#fff;border:1px solid ${LINE};border-radius:6px;padding:44px 48px}
+  .letterhead{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid ${CORAL};padding-bottom:20px;margin-bottom:26px;gap:20px}
+  .brand-name{font-family:Georgia,'Times New Roman',serif;font-size:21px;font-weight:700;color:${INK}}
+  .brand-meta{font-size:12.5px;color:${BODY};margin-top:6px;line-height:1.6}
+  .doc-title{text-align:right;flex-shrink:0}
+  .doc-title h1{font-family:Georgia,'Times New Roman',serif;font-size:25px;margin:0;letter-spacing:.3px;color:${INK}}
+  .doc-meta{font-size:12px;color:${MUTED};margin-top:6px;line-height:1.6}
+  .status{display:inline-block;font-size:11px;font-weight:700;padding:4px 11px;border-radius:12px;text-transform:uppercase;letter-spacing:.4px;color:#fff;margin-top:8px}
+  .two-col{display:flex;gap:36px;margin-bottom:30px;flex-wrap:wrap}
+  .col{flex:1;min-width:180px}
+  .col h3{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:${MUTED};margin:0 0 8px;font-weight:700}
+  .col p{margin:0;font-size:14.5px;line-height:1.65;color:${INK}}
+  table.items{width:100%;border-collapse:collapse;margin-bottom:4px}
+  table.items th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:${MUTED};border-bottom:1px solid ${LINE};padding:0 0 9px;font-weight:700}
+  table.items td{padding:15px 0;border-bottom:1px solid ${LINE};font-size:14.5px;color:${INK}}
+  table.items th.amt,table.items td.amt{text-align:right;white-space:nowrap}
+  .total-row td{border-bottom:none;padding-top:16px;font-weight:800;font-size:17px}
+  .total-row .amt{color:${CORAL_RED}}
+  .footnote{font-size:12.5px;color:${MUTED};margin-top:22px;line-height:1.7;border-top:1px solid ${LINE};padding-top:16px}
+  @media print{
+    body{background:#fff;padding:0}
+    .toolbar{display:none}
+    .paper{box-shadow:none;border:none;margin:0;max-width:none;padding:0}
+  }
+</style></head>
+<body>
+  <div class="toolbar"><button onclick="window.print()">🖨 Print</button></div>
+  <div class="paper">
+    <div class="letterhead">
+      <div>
+        <div class="brand-name">Face Painting California</div>
+        <div class="brand-meta">${esc(BUSINESS_PHONE)}<br>${esc(BUSINESS_EMAIL)}<br>Serving Marin County, San Francisco &amp; Santa Rosa</div>
+      </div>
+      <div class="doc-title">
+        <h1>Receipt</h1>
+        <div class="doc-meta">No. ${esc(receiptNo)}<br>Issued ${esc(receiptTodayPacific())}</div>
+        <div class="status" style="background:${s.color}">${esc(s.label)}</div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="col">
+        <h3>Billed to</h3>
+        <p>${billedTo}${contactLines ? `<br>${contactLines}` : ""}</p>
+      </div>
+      <div class="col">
+        <h3>Event</h3>
+        <p>${esc(eventLine) || "&mdash;"}<br>${esc(whenLine)}${b.location ? `<br>${esc(b.location)}` : ""}</p>
+      </div>
+    </div>
+
+    <table class="items">
+      <thead><tr><th>Description</th><th class="amt">Amount</th></tr></thead>
+      <tbody>
+        <tr><td>${esc(description)}</td><td class="amt">${esc(b.quote) || "&mdash;"}</td></tr>
+        <tr class="total-row"><td>Total</td><td class="amt">${esc(b.quote) || "&mdash;"}</td></tr>
+      </tbody>
+    </table>
+
+    <div class="footnote">${esc(s.note)}</div>
+  </div>
+</body></html>`;
 }
 
 // ── 5. Owner: client requested a reschedule ──────────────────────────────────

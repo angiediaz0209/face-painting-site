@@ -1,5 +1,5 @@
 import { getBooking, updateBookingLocation } from "./_lib/book.js";
-import { clientStatusHtml, sendEmail } from "./_lib/email.js";
+import { clientStatusHtml, receiptHtml, sendEmail } from "./_lib/email.js";
 import { setClientFlag } from "./_lib/clients.js";
 import { clientToken, optoutToken, verifyToken } from "./_lib/tokens.js";
 import { syncBookingsToSheet } from "./_lib/sheets.js";
@@ -151,18 +151,23 @@ export default async function handler(req, res) {
     return send(403, fallbackPage("<h2>Invalid link</h2><p>This status link isn't valid.</p>"));
   }
 
+  // Printable receipt, for schools and companies that need one on file.
+  // Reuses the same eventId/token check above — a client token that can view
+  // the status page can also print its receipt, nothing more.
+  const wantsReceipt = url.searchParams.get("action") === "receipt";
+
   try {
     const booking = await getBooking(eventId);
     if (!booking) {
       // Event was deleted/declined — treat as cancelled so the client still gets
       // a clear answer instead of an error.
-      return send(200, clientStatusHtml({ status: "CANCELLED" }));
+      return send(200, wantsReceipt ? receiptHtml({ status: "CANCELLED" }) : clientStatusHtml({ status: "CANCELLED" }));
     }
-    return send(200, clientStatusHtml(booking, { eventId, token }));
+    return send(200, wantsReceipt ? receiptHtml(booking) : clientStatusHtml(booking, { eventId, token }));
   } catch (error) {
     // events.get 404s once a pending booking is declined (deleted).
     if (error?.code === 404 || error?.response?.status === 404) {
-      return send(200, clientStatusHtml({ status: "CANCELLED" }));
+      return send(200, wantsReceipt ? receiptHtml({ status: "CANCELLED" }) : clientStatusHtml({ status: "CANCELLED" }));
     }
     console.error("Status error:", error);
     return send(

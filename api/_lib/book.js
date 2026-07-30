@@ -172,6 +172,11 @@ function parseEventToBooking(e) {
     location: descField(description, 'Location') || e.location || '',
     quote: descField(description, 'Quote'),
     notes: descField(description, 'Notes'),
+    // Written by createBooking()'s detailLines for corporate/school events, but
+    // never read back until the receipt needed to address a company or school
+    // by name rather than just the contact's personal name.
+    organization: descField(description, 'Company'),
+    occasion: descField(description, 'Occasion'),
     htmlLink: e.htmlLink || '',
   };
 }
