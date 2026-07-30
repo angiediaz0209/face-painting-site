@@ -840,7 +840,6 @@ export async function createBooking(bookingData) {
     location,
     quote,
     notes,
-    pending,
     // Which surface created this booking, for the calendar note and so the
     // owner can see which path converts. Defaults to Sky, so her existing flow
     // in api/chat.js is completely unchanged.
@@ -867,6 +866,14 @@ export async function createBooking(bookingData) {
 
   // Each becomes its own line in the calendar event, so the artist can scan it
   // rather than dig through a paragraph of notes.
+  // Same-day requests still need a human look before they go out, since
+  // there's no runway left to fix a mistake if something's wrong. Anything
+  // for a future date confirms immediately, tight/urgent timing included,
+  // that risk doesn't go away with more notice, but it's no longer a reason
+  // to hold up the booking, just a reason to flag it for awareness.
+  const today = toPacificDate(new Date());
+  const isPending = date === today;
+
   const detailLines = [
     details.honoree ? `Birthday star: ${details.honoree}` : '',
     details.companyName ? `Company: ${details.companyName}` : '',
@@ -883,9 +890,13 @@ export async function createBooking(bookingData) {
       ? `⚠️ PAPERWORK NEEDED: ${details.paperworkRequest} — sort before the event`
       : '',
     timing.status === 'urgent'
-      ? `🚨 URGENT TIMING: only ~${timing.gapMinutes} min against another booking the same day. Needs a fast answer.`
+      ? isPending
+        ? `🚨 URGENT TIMING: only ~${timing.gapMinutes} min against another booking the same day. Needs a fast answer.`
+        : `🚨 URGENT TIMING (already confirmed): only ~${timing.gapMinutes} min against another booking the same day.`
       : timing.status === 'tight'
-        ? `⏱ TIGHT TIMING: ~${timing.gapMinutes} min against another booking the same day. Confirm this is workable.`
+        ? isPending
+          ? `⏱ TIGHT TIMING: ~${timing.gapMinutes} min against another booking the same day. Confirm this is workable.`
+          : `⏱ TIGHT TIMING (already confirmed): ~${timing.gapMinutes} min against another booking the same day.`
         : '',
   ].filter(Boolean);
 
@@ -895,8 +906,6 @@ export async function createBooking(bookingData) {
 
   const startDateTime = `${date}T${startTime}:00`;
   const endDateTime = `${date}T${endTime}:00`;
-
-  const isPending = pending === true;
 
   const event = {
     summary: isPending

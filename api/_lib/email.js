@@ -291,15 +291,18 @@ export function clientRequestReceivedHtml(b) {
   ].filter(Boolean);
 
   const inner = `
-  ${heroBanner({
-    bg: CORAL,
-    icon: "📋",
-    title: "We Got Your Request!",
-    subtitle: "Our team is checking the date now",
-  })}
+  ${heroBanner(
+    b.pending
+      ? { bg: CORAL, icon: "📋", title: "We Got Your Request!", subtitle: "Our team is checking the date now" }
+      : { bg: "#4e9d63", icon: "🎉", title: "You're Booked!", subtitle: "We can't wait to paint for you" }
+  )}
   <tr><td style="padding:28px 30px 4px;">
     <div style="font-size:17px;font-weight:800;color:${INK};">Hi ${esc((b.client || "there").split(" ")[0])},</div>
-    <p style="font-size:15px;color:${BODY};line-height:1.6;margin:14px 0 0;">Thanks for sending this over! Your request is with our team now. We'll check artist availability for your date and get back to you shortly to confirm. <b>Nothing is booked just yet</b> — we'll let you know the moment it is.</p>
+    <p style="font-size:15px;color:${BODY};line-height:1.6;margin:14px 0 0;">${
+      b.pending
+        ? "Thanks for sending this over! Your request is with our team now. We'll check artist availability for your date and get back to you shortly to confirm. <b>Nothing is booked just yet</b>, we'll let you know the moment it is."
+        : "Thanks for booking with us! You're all set, your artist will be there. If anything changes on our end we'll reach out right away."
+    }</p>
   </td></tr>
   <tr><td style="padding:20px 30px 4px;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${CREAM};border-radius:14px;overflow:hidden;">${rows.join("")}</table>

@@ -236,7 +236,7 @@ export function DetailsForm({ booking, transcript, onSubmitted, disabled }) {
         setError(data.error || 'Something went wrong. Please text us at 415-991-9374.');
         return;
       }
-      onSubmitted({ duplicate: Boolean(data.duplicate), name: values.name, booking });
+      onSubmitted({ duplicate: Boolean(data.duplicate), pending: data.pending !== false, name: values.name, booking });
     } catch {
       setError("That didn't send. Check your connection, or text us at 415-991-9374.");
     } finally {
@@ -349,14 +349,18 @@ export function SuccessCard({ result }) {
       <div className="text-center">
         <div className="text-2xl mb-1.5">🎉</div>
         <p className="font-display text-navy text-base mb-1">
-          {result.duplicate ? "You're already on our list" : 'Request sent!'}
+          {result.duplicate ? "You're already on our list" : result.pending ? 'Request sent!' : "You're booked!"}
         </p>
         <p className="font-body text-navy/55 text-xs leading-relaxed">
           {result.duplicate
             ? 'We already had a request from you for that date. The team is on it.'
-            : `We'll confirm ${formatDateLong(b.date)}${
-                b.startTime ? ` at ${formatTime(b.startTime)}` : ''
-              } by text, usually within a few hours. A copy is on its way to your email.`}
+            : result.pending
+              ? `We'll confirm ${formatDateLong(b.date)}${
+                  b.startTime ? ` at ${formatTime(b.startTime)}` : ''
+                } by text, usually within a few hours. A copy is on its way to your email.`
+              : `You're all set for ${formatDateLong(b.date)}${
+                  b.startTime ? ` at ${formatTime(b.startTime)}` : ''
+                }. A confirmation is on its way to your email.`}
         </p>
       </div>
       {b.date && (

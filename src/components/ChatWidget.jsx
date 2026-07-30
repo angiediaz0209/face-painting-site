@@ -213,7 +213,9 @@ export default function ChatWidget({ onClose }) {
           role: 'assistant',
           content: result.duplicate
             ? "Looks like we already had that one from you. Our team is on it and they'll be in touch shortly."
-            : `That's you sorted${first ? `, ${first}` : ''}. Our team will confirm by text shortly. Anything else I can help with?`,
+            : result.pending
+              ? `That's you sorted${first ? `, ${first}` : ''}. Our team will confirm by text shortly. Anything else I can help with?`
+              : `You're all booked${first ? `, ${first}` : ''}! Confirmation's on its way to your email. Anything else I can help with?`,
         },
       ];
     });

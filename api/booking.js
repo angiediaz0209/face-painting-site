@@ -273,7 +273,6 @@ async function handleSubmit(req, res) {
     ]
       .filter(Boolean)
       .join(" "),
-    pending: true,
     source,
     details,
   };
@@ -331,7 +330,9 @@ async function handleSubmit(req, res) {
     }).catch((err) => console.error("Conversation log error:", err)),
     sendEmail({
       to: email,
-      subject: "We got your face painting request 🎨",
+      subject: bookingResult.pending
+        ? "We got your face painting request 🎨"
+        : "You're booked! 🎉",
       html: clientRequestReceivedHtml({
         client: name,
         date,
@@ -343,12 +344,14 @@ async function handleSubmit(req, res) {
         secondArtist,
         hours,
         statusUrl: statusUrlFor(bookingResult.eventId),
+        pending: bookingResult.pending,
       }),
     }).catch((err) => console.error("Client email error:", err)),
   ]);
 
   return json(res, 200, {
     ok: true,
+    pending: bookingResult.pending,
     quote: { total: quote.total, travelFee: quote.travelFee, area: quote.area },
   });
 }

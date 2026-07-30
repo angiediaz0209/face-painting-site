@@ -545,12 +545,10 @@ async function handleToolUse(toolUse, ctx = {}) {
     }
 
     try {
-      // Every booking must be team-approved before it is confirmed, so force
-      // pending here regardless of what the model passed. This guarantees no
-      // booking auto-confirms or sends the client an invite without approval.
+      // Whether this lands pending or confirms right away is decided inside
+      // createBooking() from the event date, not from anything passed here.
       const bookingInput = {
         ...toolUse.input,
-        pending: true,
         details: pickDetails(toolUse.input),
       };
       const bookingResult = await createBooking(bookingInput);
@@ -594,12 +592,14 @@ async function handleToolUse(toolUse, ctx = {}) {
         }).catch((err) => console.error("Conversation log error:", err)),
       ]);
 
-      const timingNote =
-        bookingResult.timingStatus === "urgent"
-          ? " Heads up: this is very tight against another booking the same day, so mention to the client the team will need to confirm quickly."
-          : bookingResult.timingStatus === "tight"
-            ? " Heads up: this is a bit tight against another booking the same day, so let the client know the team will confirm it works."
-            : "";
+      const isTimingFlagged = bookingResult.timingStatus === "tight" || bookingResult.timingStatus === "urgent";
+      const timingNote = !isTimingFlagged
+        ? ""
+        : isPending
+          ? bookingResult.timingStatus === "urgent"
+            ? " Heads up: this is very tight against another booking the same day, so mention to the client the team will need to confirm quickly."
+            : " Heads up: this is a bit tight against another booking the same day, so let the client know the team will confirm it works."
+          : " Heads up: this is booked, but it's tight against another booking the same day, you can mention that to the client in your own words if it feels natural, no need to make a big deal of it.";
 
       return {
         type: "tool_result",
@@ -608,8 +608,8 @@ async function handleToolUse(toolUse, ctx = {}) {
           success: true,
           pending: isPending,
           message: isPending
-            ? `Pending booking created for ${bookingResult.summary}, Date: ${bookingResult.start}. The team will review and confirm with the client by text at ${bookingInput.clientPhone}.${timingNote}`
-            : `Booking confirmed! Event: ${bookingResult.summary}, Date: ${bookingResult.start}. Calendar invite sent to ${bookingInput.clientEmail}.`,
+            ? `Pending booking created for ${bookingResult.summary}, Date: ${bookingResult.start}. Today's requests still need a quick team review, they'll confirm with the client by text at ${bookingInput.clientPhone}.${timingNote}`
+            : `Booking confirmed! Event: ${bookingResult.summary}, Date: ${bookingResult.start}. Calendar invite sent to ${bookingInput.clientEmail}.${timingNote}`,
         }),
       };
     } catch (error) {
