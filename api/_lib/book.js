@@ -208,15 +208,29 @@ function parseEventToBooking(e) {
 }
 
 // Same-day timing buffer, in minutes. One artist needs SETUP_TEARDOWN_MIN to
-// pack up and set up again regardless of distance, plus drive time on top of
-// that, longer when the two events cross between service areas (Marin, San
-// Francisco, Santa Rosa) than when they're in the same one.
+// pack up and set up again regardless of distance, plus real drive time on
+// top of that. Crossing pairs are NOT all the same distance: San Francisco to
+// Santa Rosa is a genuinely longer, traffic-prone drive than either of those
+// to Marin, so each pair gets its own real-world estimate rather than one
+// flat "crossing area" number.
 const SETUP_TEARDOWN_MIN = 30;
 const SAME_AREA_DRIVE_MIN = 30;
-const CROSSING_AREA_DRIVE_MIN = 60;
-const COMFORTABLE_SAME_AREA_MIN = SETUP_TEARDOWN_MIN + SAME_AREA_DRIVE_MIN; // 60
-const COMFORTABLE_CROSSING_AREA_MIN = SETUP_TEARDOWN_MIN + CROSSING_AREA_DRIVE_MIN; // 90
-// Below this, even a same-area hop isn't realistic; treated as 'urgent' rather
+const DRIVE_MINUTES = {
+  'Marin|San Francisco': 60,
+  'Marin|Santa Rosa': 60,
+  'San Francisco|Santa Rosa': 90,
+};
+// Used when a location's area can't be resolved at all: the most conservative
+// (longest) pair, since guessing short and being wrong is the risky direction.
+const UNKNOWN_PAIR_DRIVE_MIN = 90;
+
+function driveMinutesBetween(areaA, areaB) {
+  if (!areaA || !areaB) return UNKNOWN_PAIR_DRIVE_MIN;
+  if (areaA === areaB) return SAME_AREA_DRIVE_MIN;
+  return DRIVE_MINUTES[[areaA, areaB].sort().join('|')] ?? UNKNOWN_PAIR_DRIVE_MIN;
+}
+
+// Below this, even a short hop isn't realistic; treated as 'urgent' rather
 // than 'tight'. Below 0 (the times actually overlap) it's 'overlap' instead,
 // which is a hard stop, not a timing judgment call.
 const URGENT_FLOOR_MIN = 15;
@@ -290,8 +304,7 @@ export async function assessSameDayTiming({ date, startTime, endTime, location, 
     }
 
     const otherArea = resolveArea(other.location);
-    const sameArea = newArea && otherArea && newArea === otherArea;
-    const comfortable = sameArea ? COMFORTABLE_SAME_AREA_MIN : COMFORTABLE_CROSSING_AREA_MIN;
+    const comfortable = SETUP_TEARDOWN_MIN + driveMinutesBetween(newArea, otherArea);
 
     let status;
     if (gap < 0) status = 'overlap';
