@@ -29,6 +29,8 @@ export default function ChatWidget({ onClose }) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
+  const listRef = useRef(null);
   // Size of the actually-visible area on phones. See the effect below.
   const [visible, setVisible] = useState(null);
 
@@ -36,9 +38,51 @@ export default function ChatWidget({ onClose }) {
     localStorage.setItem('sky-chat-history', JSON.stringify(messages));
   }, [messages]);
 
+  // Jump straight to the newest message the first time, so reopening a saved
+  // conversation doesn't land you in the middle of old history. Animate after
+  // that, where the movement is meaningful.
+  const hasScrolled = useRef(false);
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (hasScrolled.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      return;
+    }
+    // First paint: set scrollTop directly rather than using scrollIntoView,
+    // which lands short here. Pin once on the next frame, then again once the
+    // webfonts have loaded — they reflow the text and leave the list a couple
+    // of dozen pixels short of the bottom otherwise.
+    let cancelled = false;
+    const pin = () => {
+      const list = listRef.current;
+      if (list && !cancelled) list.scrollTop = list.scrollHeight;
+    };
+    const frame = requestAnimationFrame(() => {
+      pin();
+      hasScrolled.current = true;
+    });
+    document.fonts?.ready.then(pin).catch(() => {});
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+    };
   }, [messages, isLoading]);
+
+  // Escape closes the chat, as it would any dialog.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  // Focus the composer on desktop so you can just start typing. Deliberately
+  // NOT on phones: it would throw the keyboard up over the conversation before
+  // the client has even read it, and most of them will tap a chip instead.
+  useEffect(() => {
+    if (window.matchMedia('(max-width: 639px)').matches) return;
+    inputRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     if (messages.length === 0) setMessages([GREETING]);
@@ -270,7 +314,7 @@ export default function ChatWidget({ onClose }) {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2.5 bg-cream">
+        <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2.5 bg-cream">
           {messages.map((msg, i) => (
             <div key={i}>
               <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -301,6 +345,7 @@ export default function ChatWidget({ onClose }) {
         <div className="p-3 border-t border-navy/5 shrink-0 bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div className="flex gap-2">
             <input
+              ref={inputRef}
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
