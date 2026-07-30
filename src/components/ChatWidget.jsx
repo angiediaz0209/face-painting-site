@@ -61,9 +61,23 @@ export default function ChatWidget({ onClose }) {
     const phone = window.matchMedia('(max-width: 639px)');
 
     const apply = () => {
-      setVisible(
-        phone.matches ? { height: viewport.height, offsetTop: viewport.offsetTop } : null
-      );
+      if (!phone.matches) {
+        setVisible(null);
+        return;
+      }
+      // The keyboard eats a big chunk of the visual viewport; anything smaller
+      // than this gap is just browser chrome coming and going.
+      const keyboardOpen = window.innerHeight - viewport.height > 120;
+      setVisible({
+        // Normally leave a strip of the website showing above the sheet, so it
+        // reads as a panel over the site rather than a separate screen you're
+        // stuck in. With the keyboard up there's no room to spare, so take it all.
+        height: Math.round(viewport.height * (keyboardOpen ? 1 : 0.88)),
+        // The sheet is anchored to the bottom of the LAYOUT viewport, but it
+        // needs to sit on the bottom of the VISIBLE one. This is the gap between
+        // them: 0 normally, negative (lifting the sheet) when the keyboard is up.
+        shift: Math.round(viewport.offsetTop + viewport.height - window.innerHeight),
+      });
     };
 
     apply();
@@ -206,39 +220,52 @@ export default function ChatWidget({ onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex sm:items-end sm:justify-end sm:p-4 pointer-events-none">
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:justify-end sm:p-4 pointer-events-none">
+      {/* Phones only: a light scrim so the site stays visible behind the sheet,
+          and tapping it minimises the chat the same way the header button does. */}
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Minimize chat"
+        className="pointer-events-auto absolute inset-0 bg-navy/20 sm:hidden"
+      />
+
       <div
         role="dialog"
         aria-label="Chat with Sky"
         style={
           visible
-            ? { height: `${visible.height}px`, transform: `translateY(${visible.offsetTop}px)` }
+            ? { height: `${visible.height}px`, transform: `translateY(${visible.shift}px)` }
             : undefined
         }
-        className="pointer-events-auto bg-white shadow-2xl flex flex-col w-full sm:w-[26rem] h-full sm:h-[min(80vh,620px)] sm:rounded-2xl overflow-hidden border border-navy/10"
+        className="relative pointer-events-auto bg-white shadow-2xl flex flex-col w-full sm:w-[26rem] h-[88%] sm:h-[min(80vh,620px)] rounded-t-2xl sm:rounded-2xl overflow-hidden border border-navy/10"
       >
         {/* Header */}
-        <div className="bg-gradient-to-br from-coral to-salmon px-3.5 pt-[max(0.875rem,env(safe-area-inset-top))] pb-3.5 text-white flex items-center justify-between shrink-0">
-          <div>
-            <h3 className="font-display text-base">Chat with Sky</h3>
-            <p className="text-white/80 font-body text-xs">Face Painting California</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={clearChat}
-              title="Start a new conversation"
-              className="text-white/80 hover:text-white font-body text-xs font-bold px-2.5 py-1.5 rounded-full hover:bg-white/15 transition-colors"
-            >
-              New chat
-            </button>
-            <button
-              onClick={onClose}
-              title="Minimize — your conversation stays saved"
-              aria-label="Minimize chat"
-              className="flex items-center justify-center w-8 h-8 text-white rounded-full bg-white/15 hover:bg-white/25 transition-colors"
-            >
-              <MinusIcon className="w-5 h-5" />
-            </button>
+        <div className="bg-gradient-to-br from-coral to-salmon px-3.5 pt-2.5 pb-3.5 text-white shrink-0">
+          {/* Grab handle: the usual signal that a sheet can be dismissed. */}
+          <div className="sm:hidden mx-auto mb-2 h-1 w-10 rounded-full bg-white/40" aria-hidden="true" />
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-display text-base">Chat with Sky</h3>
+              <p className="text-white/80 font-body text-xs">Face Painting California</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={clearChat}
+                title="Start a new conversation"
+                className="text-white/80 hover:text-white font-body text-xs font-bold px-2.5 py-1.5 rounded-full hover:bg-white/15 transition-colors"
+              >
+                New chat
+              </button>
+              <button
+                onClick={onClose}
+                title="Minimize — your conversation stays saved"
+                aria-label="Minimize chat"
+                className="flex items-center justify-center w-8 h-8 text-white rounded-full bg-white/15 hover:bg-white/25 transition-colors"
+              >
+                <MinusIcon className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </div>
 
