@@ -254,8 +254,10 @@ const CLIENT_HEADERS = [
   "Last Promo Sent", // 11 YYYY-MM-DD of the last discount email
   "First Seen", // 12 timestamp, preserved
   "Notes", // 13
+  "Organization", // 14 school or company name, so repeat orgs are recognised
+                  //    even when the contact person changes
 ];
-const CLIENT_RANGE = "Clients!A:N";
+const CLIENT_RANGE = "Clients!A:O";
 const SOURCE_RANK = { lead: 1, manual: 2, booking: 3 };
 
 function isTruthyCell(v) {
@@ -280,6 +282,7 @@ function rowToClient(cells, rowNumber) {
     lastPromoSent: g(11),
     firstSeen: g(12),
     notes: g(13),
+    organization: g(14),
   };
 }
 
@@ -299,6 +302,7 @@ function clientToRow(c) {
     c.lastPromoSent,
     c.firstSeen,
     c.notes,
+    c.organization,
   ].map((v) => (v == null ? "" : String(v)));
 }
 
@@ -351,12 +355,12 @@ async function ensureClientsSheet(sheets, sheetId) {
       requestBody: { requests: [{ addSheet: { properties: { title: "Clients" } } }] },
     });
   }
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: "Clients!A1:N1" });
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: "Clients!A1:O1" });
   const current = res.data.values?.[0] || [];
   if (current.join("|") !== CLIENT_HEADERS.join("|")) {
     await sheets.spreadsheets.values.update({
       spreadsheetId: sheetId,
-      range: "Clients!A1:N1",
+      range: "Clients!A1:O1",
       valueInputOption: "RAW",
       requestBody: { values: [CLIENT_HEADERS] },
     });

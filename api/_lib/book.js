@@ -679,6 +679,9 @@ export async function createBooking(bookingData) {
     details.secondArtistRequested
       ? `⚠️ WANTED A SECOND ARTIST: ${details.secondArtistRequested} — see if one can be arranged`
       : '',
+    details.paperworkRequest
+      ? `⚠️ PAPERWORK NEEDED: ${details.paperworkRequest} — sort before the event`
+      : '',
   ].filter(Boolean);
 
   const auth = getAuthClient();

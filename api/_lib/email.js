@@ -160,6 +160,9 @@ export function pendingNotificationHtml(b, { approveUrl, declineUrl, calendarUrl
     d.secondArtistRequested
       ? detailRow("Wanted a 2nd artist", esc(d.secondArtistRequested), { valueColor: CORAL_RED })
       : "",
+    d.paperworkRequest
+      ? detailRow("Paperwork needed", esc(d.paperworkRequest), { valueColor: CORAL_RED })
+      : "",
     b.notes ? detailRow("Notes", esc(b.notes), { last: true }) : "",
   ].filter(Boolean);
 

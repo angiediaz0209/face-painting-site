@@ -45,6 +45,11 @@ const DETAIL_PROPS = {
     description:
       "Only when a second artist is NOT available and the client asked for one anyway. Note what they wanted and why, so the team can try to arrange one. Leave empty otherwise.",
   },
+  paperworkRequest: {
+    type: "string",
+    description:
+      "Only when the client asks about invoicing, a purchase order, a W-9, or a certificate of insurance. Common for schools and companies. Record exactly what they need so the team can sort it out. You never offer this or promise anything about it.",
+  },
 };
 
 // Pulls those flat fields back into the `details` object createBooking expects.
@@ -179,12 +184,17 @@ const QUOTE_TOOL = {
 const LOOKUP_CLIENT_TOOL = {
   name: "lookup_client",
   description:
-    "Checks whether this is a RETURNING client, by phone and/or email. Call it once you have the client's phone or email, before asking for details we might already have (like their address). If it returns known=true, greet them warmly by name and offer what we already know — e.g. 'Want this at the same address as last time, 123 Oak St?'. Only treat someone as returning when THIS tool says so; never assume it from a first name.",
+    "Checks whether this is a RETURNING client, by phone and/or email, and whether their SCHOOL OR COMPANY has booked with us before. Call it as soon as you have a phone, an email, or a school/company name, before asking for details we might already have. Only treat someone as returning when THIS tool says so; never assume it from a name.",
   input_schema: {
     type: "object",
     properties: {
       phone: { type: "string", description: "The client's phone number, if known." },
       email: { type: "string", description: "The client's email, if known." },
+      organization: {
+        type: "string",
+        description:
+          "The school or company name, if this is a school or corporate event. Worth passing even when the person is new to us: organisations book again and again, but the person arranging it changes, so the school may be a familiar customer even though this contact isn't.",
+      },
     },
   },
 };

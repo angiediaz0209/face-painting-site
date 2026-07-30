@@ -180,6 +180,7 @@ async function handleSubmit(req, res) {
     specialRequests: clean(d.specialRequests, MAX_NOTES_LENGTH),
     customRequest: clean(d.customRequest, MAX_NOTES_LENGTH),
     secondArtistRequested: clean(d.secondArtistRequested, MAX_NOTES_LENGTH),
+    paperworkRequest: clean(d.paperworkRequest, MAX_NOTES_LENGTH),
   };
 
   const problems = [];
@@ -304,6 +305,7 @@ async function handleSubmit(req, res) {
         phone,
         email,
         source: "booking",
+        organization: details.companyName,
         lastEventDate: date,
         lastEventType: eventType,
         lastLocation: address || city,

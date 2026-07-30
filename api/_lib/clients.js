@@ -23,6 +23,20 @@ export function normalizeKey({ phone, email } = {}) {
   return String(email || "").trim().toLowerCase();
 }
 
+// Schools and companies book repeatedly, but the person doing the booking
+// changes — this year's PTA parent isn't last year's. Matching on phone or email
+// would treat the same school as a stranger every year, so organizations are
+// matched on their name instead.
+export function normalizeOrg(name) {
+  return String(name || "")
+    .toLowerCase()
+    .replace(/[.,'’&]/g, " ")
+    // Drop words that vary between how people write the same organisation.
+    .replace(/\b(the|a|inc|llc|ltd|co|corp|corporation|company|school|elementary|middle|high|academy|district|pta|pto)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function phoneDigits(p) {
   return String(p || "").replace(/\D/g, "").slice(-10);
 }
@@ -49,33 +63,77 @@ export async function setClientFlag(key, flags = {}) {
 // ── Recognition (used by Sky) ─────────────────────────────────────────────────
 
 /**
- * Looks a client up by phone/email ONLY (never by name alone, so Sky can't
- * mis-greet a stranger who shares a first name). Returns a compact summary.
+ * Looks a client up by phone/email (never by personal name alone, so Sky can't
+ * mis-greet a stranger who shares a first name), and separately looks up their
+ * ORGANIZATION by name.
+ *
+ * The organization result deliberately carries no personal details of whoever
+ * booked last time. A new PTA parent should inherit the school's history —
+ * address, what they booked before — not the previous parent's contact card.
  */
-export async function lookupClient({ phone, email } = {}) {
-  const key = normalizeKey({ phone, email });
-  if (!key) return { known: false };
-
+export async function lookupClient({ phone, email, organization } = {}) {
   const clients = await getClients();
-  const digits = phoneDigits(phone);
-  const em = String(email || "").trim().toLowerCase();
+  const result = { known: false };
 
-  const match = clients.find(
-    (c) =>
-      c.key === key ||
-      (digits && phoneDigits(c.phone) === digits) ||
-      (em && String(c.email || "").trim().toLowerCase() === em)
-  );
-  if (!match) return { known: false };
+  const key = normalizeKey({ phone, email });
+  if (key) {
+    const digits = phoneDigits(phone);
+    const em = String(email || "").trim().toLowerCase();
+    const match = clients.find(
+      (c) =>
+        c.key === key ||
+        (digits && phoneDigits(c.phone) === digits) ||
+        (em && String(c.email || "").trim().toLowerCase() === em)
+    );
+    if (match) {
+      Object.assign(result, {
+        known: true,
+        name: match.name,
+        lastEventDate: match.lastEventDate,
+        lastEventType: match.lastEventType,
+        lastLocation: match.lastLocation,
+        totalBookings: match.totalBookings,
+      });
+    }
+  }
 
-  return {
-    known: true,
-    name: match.name,
-    lastEventDate: match.lastEventDate,
-    lastEventType: match.lastEventType,
-    lastLocation: match.lastLocation,
-    totalBookings: match.totalBookings,
-  };
+  const org = normalizeOrg(organization);
+  if (org) {
+    const rows = clients.filter((c) => normalizeOrg(c.organization) === org);
+    if (rows.length) {
+      // Newest event first, so "last time" means the most recent one.
+      const sorted = [...rows].sort((a, b) =>
+        String(b.lastEventDate || "").localeCompare(String(a.lastEventDate || ""))
+      );
+      const latest = sorted[0];
+      result.organizationKnown = true;
+      result.organization = {
+        name: latest.organization,
+        lastEventDate: latest.lastEventDate,
+        lastEventType: latest.lastEventType,
+        lastLocation: latest.lastLocation,
+        // How many times this organization has booked, across every contact.
+        bookingsWithUs: rows.reduce(
+          (sum, c) => sum + (parseInt(c.totalBookings, 10) || 0),
+          0
+        ),
+        // Deliberately no phone, email or contact name from previous bookings.
+      };
+    }
+  }
+
+  // Say the negative out loud. Left implicit, the model has been observed
+  // greeting a brand-new school with "good to hear from you again", which is
+  // worse than not recognising them at all.
+  if (!result.known && !result.organizationKnown) {
+    result.note =
+      "No match. This is a NEW person and a NEW organization to us. Do not say welcome back, do not say it is good to hear from them again, and do not refer to any previous booking. Greet them as someone we have never met.";
+  } else if (!result.known && result.organizationKnown) {
+    result.note =
+      "The ORGANIZATION has booked before but THIS PERSON has not. Welcome the organization back, and introduce yourself to the person as someone new. Never mention the previous contact by name or read back their details.";
+  }
+
+  return result;
 }
 
 // ── Birthday follow-ups ───────────────────────────────────────────────────────
