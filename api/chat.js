@@ -213,6 +213,11 @@ const SAVE_LEAD_TOOL = {
         type: "string",
         description: "The kind of event they asked about, if known (e.g. Birthday Party).",
       },
+      organization: {
+        type: "string",
+        description:
+          "Their school or company name, if it's a school or corporate enquiry. Worth saving even when they don't book, so we recognise the organisation if someone else there gets in touch later.",
+      },
       notes: {
         type: "string",
         description: "A short note: what they wanted, their city/date, or why they didn't book yet.",
@@ -445,12 +450,13 @@ async function handleToolUse(toolUse, ctx = {}) {
 
   if (toolUse.name === "save_lead") {
     try {
-      const { name, phone, email, eventType, notes } = toolUse.input;
+      const { name, phone, email, eventType, notes, organization } = toolUse.input;
       const saved = await upsertClient({
         name,
         phone,
         email,
         source: "lead",
+        organization: organization || "",
         lastEventType: eventType || "",
         notes: notes || "",
       });
@@ -557,6 +563,9 @@ async function handleToolUse(toolUse, ctx = {}) {
             phone: bookingInput.clientPhone,
             email: bookingInput.clientEmail,
             source: "booking",
+            // Keep the org here too, or a school booked through this path
+            // wouldn't be recognised next year.
+            organization: bookingInput.details?.companyName || "",
             lastEventDate: bookingInput.date,
             lastEventType: bookingInput.eventType,
             lastLocation: bookingInput.location,

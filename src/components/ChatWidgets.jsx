@@ -285,7 +285,9 @@ export function DetailsForm({ booking, transcript, onSubmitted, disabled }) {
           value={extra}
           onChange={(e) => setExtra(e.target.value)}
           rows={2}
-          placeholder="Anything we should know? Allergies, parking, a shy little one (optional)"
+          // Kept short on purpose: a longer placeholder gets clipped mid-word
+          // in this two-row box at phone width.
+          placeholder="Allergies, parking, anything else? (optional)"
           className={`${inputClass} resize-none`}
         />
         {/* Honeypot: hidden from people, tempting to bots. */}

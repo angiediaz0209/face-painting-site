@@ -29,6 +29,8 @@ export default function ChatWidget({ onClose }) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
+  // Size of the actually-visible area on phones. See the effect below.
+  const [visible, setVisible] = useState(null);
 
   useEffect(() => {
     localStorage.setItem('sky-chat-history', JSON.stringify(messages));
@@ -41,6 +43,45 @@ export default function ChatWidget({ onClose }) {
   useEffect(() => {
     if (messages.length === 0) setMessages([GREETING]);
   }, []);
+
+  /**
+   * Keep the chat inside the visible area when the phone keyboard is open.
+   *
+   * On iOS the layout viewport does NOT shrink for the keyboard, so a
+   * full-height fixed panel keeps its full height and the input sits behind the
+   * keyboard — you can't see what you're typing. visualViewport reports the
+   * area actually on screen, so we size to that instead, and follow offsetTop
+   * because iOS scrolls the visual viewport rather than resizing the layout.
+   *
+   * Phones only: on desktop the panel keeps its normal size.
+   */
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const phone = window.matchMedia('(max-width: 639px)');
+
+    const apply = () => {
+      setVisible(
+        phone.matches ? { height: viewport.height, offsetTop: viewport.offsetTop } : null
+      );
+    };
+
+    apply();
+    viewport.addEventListener('resize', apply);
+    viewport.addEventListener('scroll', apply);
+    phone.addEventListener('change', apply);
+    return () => {
+      viewport.removeEventListener('resize', apply);
+      viewport.removeEventListener('scroll', apply);
+      phone.removeEventListener('change', apply);
+    };
+  }, []);
+
+  // When the keyboard opens the panel shrinks, so pull the latest message back
+  // into view rather than leaving it hidden above the fold.
+  useEffect(() => {
+    if (visible) messagesEndRef.current?.scrollIntoView({ block: 'end' });
+  }, [visible?.height]);
 
   const sendMessageText = async (userMessage) => {
     if (isLoading) return;
@@ -169,6 +210,11 @@ export default function ChatWidget({ onClose }) {
       <div
         role="dialog"
         aria-label="Chat with Sky"
+        style={
+          visible
+            ? { height: `${visible.height}px`, transform: `translateY(${visible.offsetTop}px)` }
+            : undefined
+        }
         className="pointer-events-auto bg-white shadow-2xl flex flex-col w-full sm:w-[26rem] h-full sm:h-[min(80vh,620px)] sm:rounded-2xl overflow-hidden border border-navy/10"
       >
         {/* Header */}
