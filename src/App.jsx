@@ -7,7 +7,7 @@ import Reviews from './components/Reviews';
 import FAQ from './components/FAQ';
 import Contact from './components/Contact';
 import ChatWidget from './components/ChatWidget';
-import { StarIcon, HeartIcon, PaletteIcon, MessageIcon } from './components/Icons';
+import { HeartIcon, PaletteIcon, MessageIcon, ShieldCheckIcon } from './components/Icons';
 import birthdayImg from './assets/designs/services/birthday.png';
 import setupImg from './assets/designs/services/setup.jpg';
 import festivalImg from './assets/designs/services/festival.png';
@@ -131,12 +131,12 @@ export default function App() {
             </div>
             <div className="hidden sm:block w-px h-10 bg-gray-light" />
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 bg-sunshine/20 rounded-full flex items-center justify-center">
-                <StarIcon className="w-5 h-5 text-orange" />
+              <div className="w-9 h-9 bg-teal/15 rounded-full flex items-center justify-center">
+                <ShieldCheckIcon className="w-5 h-5 text-teal" />
               </div>
               <div>
-                <span className="font-body font-bold text-navy text-sm block">5-Star Rated</span>
-                <span className="font-body text-gray text-xs">Loved by parents everywhere</span>
+                <span className="font-body font-bold text-navy text-sm block">Trusted by Local Schools</span>
+                <span className="font-body text-gray text-xs">Booked by schools & organizations</span>
               </div>
             </div>
           </div>
