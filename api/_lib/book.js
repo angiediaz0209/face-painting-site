@@ -637,6 +637,39 @@ export function artistPrepNote({ startTime, endTime, guestCount }) {
     : '';
 }
 
+/**
+ * Sets the event location. Used when a client books before they've settled on a
+ * venue and sends the address later from their status page. Updates both the
+ * calendar event's location field and the "Location:" line in the description
+ * that parseEventToBooking reads back.
+ */
+export async function updateBookingLocation(eventId, location) {
+  const auth = getAuthClient();
+  const calendarId = process.env.GOOGLE_CALENDAR_ID;
+  const calendar = google.calendar({ version: 'v3', auth });
+
+  const { data: event } = await calendar.events.get({ calendarId, eventId });
+  const description = String(event.description || '');
+  const updated = /^Location:\s*.*$/m.test(description)
+    ? description.replace(/^Location:\s*.*$/m, `Location: ${location}`)
+    : `${description}\nLocation: ${location}`;
+
+  await calendar.events.patch({
+    calendarId,
+    eventId,
+    resource: {
+      location,
+      description: updated
+        // Drop the "confirm with client" nudge now that we have it.
+        .replace(/^.*Street address not given yet, confirm with client\.?\s*$/gm, '')
+        .replace(/\n{3,}/g, '\n\n'),
+    },
+    sendUpdates: 'none',
+  });
+
+  return parseEventToBooking({ ...event, location, description: updated });
+}
+
 export async function createBooking(bookingData) {
   const {
     clientName,

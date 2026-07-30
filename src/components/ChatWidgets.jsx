@@ -273,14 +273,20 @@ export function DetailsForm({ booking, transcript, onSubmitted, disabled }) {
           placeholder="Phone"
           className={inputClass}
         />
+        {/* This is the EVENT location, not the client's home. The label has to
+            say so: browser autofill offers their home address, which is right
+            for a party at home and badly wrong for one at a park. */}
         <input
           type="text"
           value={values.address}
           onChange={(e) => set({ address: e.target.value })}
           autoComplete="street-address"
-          placeholder="Address (optional)"
+          placeholder="Where's the party? Address or venue"
           className={inputClass}
         />
+        <p className="font-body text-navy/40 text-[11px] -mt-1 px-1">
+          Not booked a venue yet? Leave it blank and send it over later.
+        </p>
         <textarea
           value={extra}
           onChange={(e) => setExtra(e.target.value)}

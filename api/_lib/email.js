@@ -394,6 +394,36 @@ export function clientStatusHtml(b, { eventId, token } = {}) {
     b.quote ? detailRow("Quote", esc(b.quote), { valueColor: CORAL, last: true }) : "",
   ].filter(Boolean);
 
+  // Clients often book before they've settled on a park or venue, so the
+  // address is optional at booking time. This is where they send it later.
+  // Prominent when we still don't have one, tucked away when we do.
+  const needsAddress = active && eventId && token && !b.location;
+  const addressBlock =
+    active && eventId && token
+      ? `
+  <tr><td style="padding:${needsAddress ? "22px" : "18px"} 30px;border-top:1px solid ${LINE};">
+    <details ${needsAddress ? "open" : ""} style="text-align:center;">
+      <summary style="font-size:${needsAddress ? "14px" : "13px"};color:${needsAddress ? INK : MUTED};font-weight:${needsAddress ? "700" : "400"};text-decoration:${needsAddress ? "none" : "underline"};cursor:pointer;">
+        ${needsAddress ? "📍 Where's your event happening?" : "Need to update the address?"}
+      </summary>
+      <div style="max-width:360px;margin:14px auto 0;text-align:left;">
+        ${
+          needsAddress
+            ? `<p style="font-size:13px;color:${BODY};line-height:1.6;text-align:center;margin:0 0 14px;">We don't have an address yet. Send it whenever you have it, even the name of the park is enough to get us started.</p>`
+            : ""
+        }
+        <form method="POST" action="/api/status?action=address">
+          <input type="hidden" name="eventId" value="${esc(eventId)}">
+          <input type="hidden" name="token" value="${esc(token)}">
+          <input type="text" name="location" required placeholder="Address, park or venue name"
+            style="width:100%;padding:11px;border:1px solid ${LINE};border-radius:10px;font-size:15px;box-sizing:border-box;margin-bottom:12px;">
+          <button type="submit" style="width:100%;background:${CORAL};color:#fff;border:none;padding:13px;border-radius:24px;font-weight:700;font-size:15px;cursor:pointer;">Send the address</button>
+        </form>
+      </div>
+    </details>
+  </td></tr>`
+      : "";
+
   // Discreet by design: a small muted disclosure, not a button. Only offered on a
   // live booking that hasn't already got a request in flight.
   const rescheduleBlock = canRequest
@@ -433,6 +463,7 @@ export function clientStatusHtml(b, { eventId, token } = {}) {
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${CREAM};border-radius:14px;overflow:hidden;">${rows.join("")}</table>
   </td></tr>
   ${active && !requested && b.date && b.time ? `<tr><td style="padding:22px 30px 6px;text-align:center;">${ctaButton(addToCalendarUrl(b), "Add to Calendar")}</td></tr>` : ""}
+  ${addressBlock}
   ${rescheduleBlock}`;
   return shell({ preheader: `Your booking status: ${s.title}`, inner });
 }
