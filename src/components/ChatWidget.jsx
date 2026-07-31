@@ -245,6 +245,8 @@ export default function ChatWidget({ onClose }) {
             city={msg.ui.city}
             hours={msg.ui.hours}
             secondArtist={msg.ui.secondArtist}
+            lastQuote={msg.ui.lastQuote}
+            lastHours={msg.ui.lastHours}
             onAccept={pick}
             disabled={stale}
           />

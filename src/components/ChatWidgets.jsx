@@ -142,8 +142,8 @@ export function TimeCard({ hours = 2, onPick, disabled }) {
  * Itemised price, computed in the browser from the same function the server
  * uses. Sky passes the inputs; the arithmetic never goes near the model.
  */
-export function QuoteCard({ city, hours, secondArtist, onAccept, disabled }) {
-  const q = computeQuote({ city, hours, secondArtist });
+export function QuoteCard({ city, hours, secondArtist, lastQuote, lastHours, onAccept, disabled }) {
+  const q = computeQuote({ city, hours, secondArtist, lastQuote, lastHours });
   if (!q.inServiceArea) return null;
 
   const rows = [

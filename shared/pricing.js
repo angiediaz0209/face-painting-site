@@ -40,38 +40,59 @@ export function resolveArea(cityRaw) {
   return null;
 }
 
+// A returning client rebooking the exact same package (same hours) moves
+// toward today's regular price $25 at a time instead of jumping straight to
+// it. lastQuote/lastHours come from the client's record, either tracked
+// automatically from their last booking or entered by hand for a client whose
+// history predates this. Once the gap closes, this stops doing anything,
+// regular pricing wins from then on.
+const LOYALTY_STEP = 25;
+
 /**
  * Computes the exact quote for a booking.
  * @param {object} input
  * @param {string} input.city - event city
  * @param {number} input.hours - total painting hours (1 = $150, 2 = $300, each hour beyond 2 = +$100)
  * @param {boolean} [input.secondArtist] - include a second artist (+$200)
+ * @param {number} [input.lastQuote] - what this client paid last time, if returning
+ * @param {number} [input.lastHours] - the package (hours) they booked last time
  * Returns { inServiceArea:false } when the city is out of area, otherwise the
  * full breakdown with a grand total.
  */
-export function computeQuote({ city, hours, secondArtist } = {}) {
+export function computeQuote({ city, hours, secondArtist, lastQuote, lastHours } = {}) {
   const area = resolveArea(city);
   if (!area) {
     return { inServiceArea: false, city: city || "" };
   }
 
   const h = Number(hours);
+  const effectiveHours = !h || h < 1 ? 2 : h; // default to the two hour package
   let hoursPrice;
-  if (!h || h < 1) hoursPrice = 300; // default to the two hour package
-  else if (h === 1) hoursPrice = 150;
-  else hoursPrice = 300 + (h - 2) * 100;
+  if (effectiveHours === 1) hoursPrice = 150;
+  else hoursPrice = 300 + (effectiveHours - 2) * 100;
 
   const travelFee = TRAVEL_FEE[area];
   const secondArtistFee = secondArtist ? 200 : 0;
-  const total = hoursPrice + travelFee + secondArtistFee;
+  const regularTotal = hoursPrice + travelFee + secondArtistFee;
+
+  const last = Number(lastQuote);
+  const samePackage = Number.isFinite(last) && last > 0 && Number(lastHours) === effectiveHours;
+  const total = samePackage ? Math.min(regularTotal, last + LOYALTY_STEP) : regularTotal;
+  const loyaltyApplied = samePackage && total < regularTotal;
+  // The step-up is absorbed into the package price line so the itemised
+  // breakdown always sums to the total; travel and second-artist fees stay
+  // the real current cost, never discounted.
+  const displayHoursPrice = total - travelFee - secondArtistFee;
 
   return {
     inServiceArea: true,
     area,
-    hours: !h || h < 1 ? 2 : h,
-    hoursPrice,
+    hours: effectiveHours,
+    hoursPrice: displayHoursPrice,
     secondArtistFee,
     travelFee,
     total,
+    regularTotal,
+    loyaltyApplied,
   };
 }

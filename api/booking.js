@@ -15,7 +15,7 @@ import { createBooking, listBusyDates, findDuplicateBooking, artistPrepNote } fr
 import { sendBookingNotification } from "./_lib/notify.js";
 import { addBookingToSheet, addConversation } from "./_lib/sheets.js";
 import { computeQuote } from "./_lib/pricing.js";
-import { upsertClient } from "./_lib/clients.js";
+import { upsertClient, lookupClient } from "./_lib/clients.js";
 import { isSecondArtistAvailable } from "./_lib/sheets.js";
 import { sendEmail, clientRequestReceivedHtml } from "./_lib/email.js";
 import { getClientIp, isRateLimited } from "./_lib/ratelimit.js";
@@ -211,8 +211,18 @@ async function handleSubmit(req, res) {
   }
 
   // Recompute the price server-side. The browser sends a total for display only;
-  // this is the number that goes on the booking.
-  const quote = computeQuote({ city, hours, secondArtist });
+  // this is the number that goes on the booking. lastQuote/lastHours for the
+  // loyalty step-up are looked up fresh here too, from the trusted Clients
+  // record, never taken from the request body, a client could otherwise just
+  // claim any lastQuote it wanted.
+  const priorQuote = await lookupClient({ phone, email }).catch(() => ({}));
+  const quote = computeQuote({
+    city,
+    hours,
+    secondArtist,
+    lastQuote: priorQuote.lastQuote,
+    lastHours: priorQuote.lastHours,
+  });
   if (!quote.inServiceArea) {
     return json(res, 400, {
       outOfArea: true,
@@ -314,6 +324,10 @@ async function handleSubmit(req, res) {
         lastEventDate: date,
         lastEventType: eventType,
         lastLocation: address || city,
+        // What they actually paid this time becomes the new anchor for next
+        // time, continuing the step-up from wherever it left off.
+        lastQuote: quote.total,
+        lastHours: hours,
       },
       { incrementBookings: true }
     ).catch((err) => console.error("Client upsert error:", err)),

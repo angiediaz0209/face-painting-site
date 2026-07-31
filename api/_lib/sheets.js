@@ -257,8 +257,10 @@ const CLIENT_HEADERS = [
   "Notes", // 13
   "Organization", // 14 school or company name, so repeat orgs are recognised
                   //    even when the contact person changes
+  "Last Quote", // 15 total $ this client paid last time, for the loyalty step-up
+  "Last Package Hours", // 16 the hours package that quote was for, must match to apply the step-up
 ];
-const CLIENT_RANGE = "Clients!A:O";
+const CLIENT_RANGE = "Clients!A:Q";
 const SOURCE_RANK = { lead: 1, manual: 2, booking: 3 };
 
 function isTruthyCell(v) {
@@ -284,6 +286,8 @@ function rowToClient(cells, rowNumber) {
     firstSeen: g(12),
     notes: g(13),
     organization: g(14),
+    lastQuote: g(15),
+    lastHours: g(16),
   };
 }
 
@@ -304,6 +308,8 @@ function clientToRow(c) {
     c.firstSeen,
     c.notes,
     c.organization,
+    c.lastQuote,
+    c.lastHours,
   ].map((v) => (v == null ? "" : String(v)));
 }
 
@@ -341,6 +347,8 @@ function mergeClient(existing, incoming, incrementBookings) {
     firstSeen: e.firstSeen || nowStamp(),
     notes: pick(incoming.notes, e.notes),
     organization: pick(incoming.organization, e.organization),
+    lastQuote: pick(incoming.lastQuote, e.lastQuote),
+    lastHours: pick(incoming.lastHours, e.lastHours),
   };
 }
 
@@ -357,12 +365,12 @@ async function ensureClientsSheet(sheets, sheetId) {
       requestBody: { requests: [{ addSheet: { properties: { title: "Clients" } } }] },
     });
   }
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: "Clients!A1:O1" });
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: "Clients!A1:Q1" });
   const current = res.data.values?.[0] || [];
   if (current.join("|") !== CLIENT_HEADERS.join("|")) {
     await sheets.spreadsheets.values.update({
       spreadsheetId: sheetId,
-      range: "Clients!A1:O1",
+      range: "Clients!A1:Q1",
       valueInputOption: "RAW",
       requestBody: { values: [CLIENT_HEADERS] },
     });
@@ -410,10 +418,10 @@ export async function upsertClient(record, { incrementBookings = false } = {}) {
   if (existing) {
     await sheets.spreadsheets.values.update({
       spreadsheetId: sheetId,
-      // Must span every column CLIENT_HEADERS defines (A:O) — a range one
+      // Must span every column CLIENT_HEADERS defines (A:Q) — a range one
       // column short here silently truncates the last field on every update
-      // instead of erroring, which is how Organization went missing.
-      range: `Clients!A${existing.rowNumber}:O${existing.rowNumber}`,
+      // instead of erroring, which is how Organization went missing before.
+      range: `Clients!A${existing.rowNumber}:Q${existing.rowNumber}`,
       valueInputOption: "RAW",
       requestBody: { values: [row] },
     });
@@ -447,7 +455,7 @@ export async function removeClient(key) {
     if ((rows[i][0] || "").trim() === key) {
       await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
-        range: `Clients!A${i + 1}:O${i + 1}`,
+        range: `Clients!A${i + 1}:Q${i + 1}`,
         valueInputOption: "RAW",
         requestBody: { values: [Array(CLIENT_HEADERS.length).fill("")] },
       });

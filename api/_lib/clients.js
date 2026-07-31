@@ -98,6 +98,11 @@ export async function lookupClient({ phone, email, organization } = {}) {
         lastEventType: match.lastEventType,
         lastLocation: match.lastLocation,
         totalBookings: match.totalBookings,
+        // For the loyalty price step-up (see computeQuote in shared/pricing.js).
+        // Only meaningful together: a quote with no matching hours can't be
+        // compared to anything.
+        lastQuote: match.lastQuote || "",
+        lastHours: match.lastHours || "",
       });
     }
   }

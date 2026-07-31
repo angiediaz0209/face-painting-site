@@ -188,6 +188,15 @@ const QUOTE_TOOL = {
         description:
           "True if a second artist is included (+$200). Recommend for groups of about 23 or more.",
       },
+      lastQuote: {
+        type: "number",
+        description:
+          "This client's lastQuote from lookup_client, if they're returning. Pass it whenever you have it; the tool only uses it when lastHours also matches this booking's hours.",
+      },
+      lastHours: {
+        type: "number",
+        description: "This client's lastHours from lookup_client, if they're returning.",
+      },
     },
     required: ["city", "hours"],
   },
@@ -196,7 +205,7 @@ const QUOTE_TOOL = {
 const LOOKUP_CLIENT_TOOL = {
   name: "lookup_client",
   description:
-    "Checks whether this is a RETURNING client, by phone and/or email, and whether their SCHOOL OR COMPANY has booked with us before. Call it as soon as you have a phone, an email, or a school/company name, before asking for details we might already have. Only treat someone as returning when THIS tool says so; never assume it from a name.",
+    "Checks whether this is a RETURNING client, by phone and/or email, and whether their SCHOOL OR COMPANY has booked with us before. Call it as soon as you have a phone, an email, or a school/company name, before asking for details we might already have. Only treat someone as returning when THIS tool says so; never assume it from a name. If it returns lastQuote and lastHours, pass BOTH straight through to calculate_quote/show_quote once you know how many hours THIS booking is for. They only matter when this booking's hours match lastHours exactly; the tools handle that check themselves, you don't need to compare them yourself.",
   input_schema: {
     type: "object",
     properties: {
@@ -299,6 +308,15 @@ const SHOW_QUOTE_TOOL = {
       city: { type: "string", description: "The event city." },
       hours: { type: "number", description: "Painting hours: 1, 2, 3..." },
       secondArtist: { type: "boolean", description: "Whether a second artist is included." },
+      lastQuote: {
+        type: "number",
+        description:
+          "This client's lastQuote from lookup_client, if they're returning. Pass it whenever you have it; the card only uses it when lastHours also matches this booking's hours.",
+      },
+      lastHours: {
+        type: "number",
+        description: "This client's lastHours from lookup_client, if they're returning.",
+      },
     },
     required: ["city", "hours"],
   },
@@ -323,6 +341,15 @@ const SHOW_DETAILS_FORM_TOOL = {
       hours: { type: "number", description: "Painting hours." },
       secondArtist: { type: "boolean", description: "Whether a second artist is included." },
       notes: { type: "string", description: "Anything else useful the client mentioned." },
+      lastQuote: {
+        type: "number",
+        description:
+          "This client's lastQuote from lookup_client, if they're returning and you showed them a quote using it. Pass it through so the actual booking prices the same as the card they saw.",
+      },
+      lastHours: {
+        type: "number",
+        description: "This client's lastHours from lookup_client, if they're returning.",
+      },
       ...DETAIL_PROPS,
     },
     required: ["city", "date", "startTime", "eventType", "guestBand", "hours"],
@@ -342,6 +369,8 @@ const WIDGET_TOOLS = {
     city: input.city,
     hours: Number(input.hours) || 2,
     secondArtist: input.secondArtist === true,
+    lastQuote: Number(input.lastQuote) || undefined,
+    lastHours: Number(input.lastHours) || undefined,
   }),
   show_details_form: (input) => ({
     type: "details_form",
@@ -354,6 +383,8 @@ const WIDGET_TOOLS = {
       hours: Number(input.hours) || 2,
       secondArtist: input.secondArtist === true,
       notes: input.notes || "",
+      lastQuote: Number(input.lastQuote) || undefined,
+      lastHours: Number(input.lastHours) || undefined,
       details: pickDetails(input),
     },
   }),
@@ -554,6 +585,16 @@ async function handleToolUse(toolUse, ctx = {}) {
       const bookingResult = await createBooking(bookingInput);
       const isPending = bookingResult.pending;
 
+      // Best-effort: this fallback path's quote is Sky's own text (e.g. "$300")
+      // and there's no explicit hours field, so both are derived rather than
+      // guaranteed. Skipped entirely if either can't be parsed cleanly, next
+      // time's lookup_client just won't have a lastQuote to work with.
+      const parsedQuoteTotal = Number(String(bookingInput.quote || "").replace(/[^0-9.]/g, "")) || null;
+      const [bh, bm] = String(bookingInput.startTime || "").split(":").map(Number);
+      const [eh, em] = String(bookingInput.endTime || "").split(":").map(Number);
+      const parsedHours =
+        Number.isFinite(bh) && Number.isFinite(eh) ? (eh * 60 + (em || 0) - (bh * 60 + (bm || 0))) / 60 : null;
+
       // Await both side effects so they finish before this serverless function
       // is frozen after the response. (Fire-and-forget gets cut off mid-write,
       // which is why sheet rows were going missing.) Failures are logged but
@@ -579,6 +620,8 @@ async function handleToolUse(toolUse, ctx = {}) {
             lastEventDate: bookingInput.date,
             lastEventType: bookingInput.eventType,
             lastLocation: bookingInput.location,
+            ...(parsedQuoteTotal ? { lastQuote: parsedQuoteTotal } : {}),
+            ...(parsedHours ? { lastHours: parsedHours } : {}),
           },
           { incrementBookings: true }
         ).catch((err) => console.error("Client upsert error:", err)),

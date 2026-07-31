@@ -552,6 +552,11 @@ function clientFields(c = {}) {
       <input class="bin" type="text" name="birthday" placeholder="Birthday MM-DD (optional)" value="${v(c.birthday)}" style="flex:1;min-width:120px">
     </div>
     <input class="bin" type="text" name="location" placeholder="Last location / address" value="${v(c.lastLocation)}">
+    <div class="form-row">
+      <input class="bin" type="number" name="lastQuote" placeholder="Last quote ($, optional)" value="${v(c.lastQuote)}" min="0" step="1" style="flex:1;min-width:120px">
+      <input class="bin" type="number" name="lastHours" placeholder="Package hours" value="${v(c.lastHours)}" min="0" step="0.5" style="flex:1;min-width:120px">
+    </div>
+    <div class="hint">Sets a starting point for the loyalty price step-up. Only applies when a future booking is for the same number of hours as this.</div>
     <textarea class="bin" name="notes" placeholder="Notes" rows="2">${v(c.notes)}</textarea>`;
 }
 
@@ -573,6 +578,7 @@ function clientCard(c, base, scope = "clients") {
     </div>
     ${meta ? `<div class="crmeta">${meta}</div>` : ""}
     ${last ? `<div class="crmeta">Last: ${last}${bookings}</div>` : ""}
+    ${c.lastQuote ? `<div class="crmeta">💰 Last paid: $${esc(c.lastQuote)}${c.lastHours ? ` for ${esc(c.lastHours)}h` : ""}</div>` : ""}
     ${c.birthday ? `<div class="crmeta">🎂 ${esc(c.birthday)}</div>` : ""}
     ${c.notes ? `<div class="crmeta">${esc(c.notes)}</div>` : ""}
     <div class="cactions">
@@ -1030,6 +1036,8 @@ async function handleAction(body, base) {
       lastLocation: (body.location || "").trim(),
       birthday: (body.birthday || "").trim(),
       notes: (body.notes || "").trim(),
+      lastQuote: (body.lastQuote || "").trim(),
+      lastHours: (body.lastHours || "").trim(),
     };
     // Only a CREATE sets the source. A plain edit leaves it out entirely, so
     // mergeClient() falls back to whatever the record already had. The edit
