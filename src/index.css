@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Caveat:wght@600;700&family=Nunito:wght@400;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -10,16 +10,17 @@ html {
 }
 
 body {
-  font-family: 'Nunito', sans-serif;
-  background-color: #FFFDF7;
-  color: #1B2838;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  background-color: #FFFFFF;
+  color: #211A19;
+  -webkit-font-smoothing: antialiased;
   /* Remove the grey tap flash for a native-app feel */
   -webkit-tap-highlight-color: transparent;
 }
 
 /* Anchored sections clear the sticky header when jumped to */
 [id] {
-  scroll-margin-top: 72px;
+  scroll-margin-top: 80px;
 }
 
 /* Prevent iOS from zooming in when focusing form fields on mobile */
@@ -32,36 +33,137 @@ body {
 }
 
 h1, h2, h3 {
-  font-family: 'Fredoka One', cursive;
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  /* SOFT rounds the terminals, WONK swaps in the angled single-storey
+     letterforms — the bit that gives Fraunces its character. */
+  font-variation-settings: 'opsz' 96, 'SOFT' 40, 'WONK' 1;
 }
 
-/* Fade-up animations handle their own opacity via keyframes + forwards fill */
+@layer components {
+  /* Same label, two grounds. Both are the brand hue — deep coral on light
+     backgrounds, soft coral on dark — so identity reads the same either way. */
+  .eyebrow {
+    @apply font-body text-[11px] font-bold uppercase tracking-[0.16em] text-brand-deep;
+  }
+  .eyebrow-dark {
+    @apply font-body text-[11px] font-bold uppercase tracking-[0.16em] text-brand-light;
+  }
 
-/* Service card hover */
+  .section-title {
+    @apply font-display text-[2rem] sm:text-[2.6rem] leading-[1.12] text-ink;
+  }
+
+  .section-intro {
+    @apply font-body text-slate leading-relaxed;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg font-body font-semibold
+           text-[15px] px-6 py-3 transition-colors duration-150;
+  }
+  /* One rule decides button colour: on light ground the action is brand, on
+     dark ground it was amber. The coral clears contrast on both, so the two
+     rules collapsed into one — and gold sitting beside coral only muddies. */
+  .btn-primary {
+    @apply btn bg-brand text-white hover:bg-brand-dark;
+  }
+  .btn-ghost {
+    @apply btn bg-white text-ink border border-line hover:border-ink/30 hover:bg-sand;
+  }
+  .btn-accent {
+    @apply btn bg-brand text-white hover:bg-brand-dark;
+  }
+  .btn-onDark {
+    @apply btn border border-white/25 text-white hover:bg-white/10;
+  }
+
+  /* Poster headline: hero and the service panels. Body sections stay on Fraunces. */
+  .poster {
+    @apply font-body font-extrabold uppercase leading-[0.86] tracking-[-0.02em];
+  }
+
+  /* Legibility for type sitting directly on a photo. A shadow on the glyphs
+     keeps the picture untouched, unlike a wash that tints the whole frame. */
+  .on-photo {
+    text-shadow: 0 1px 3px rgba(20, 10, 8, 0.55), 0 4px 28px rgba(20, 10, 8, 0.7);
+  }
+
+  /* Bordered surface. Depth comes from the hairline, not a drop shadow. */
+  .surface {
+    @apply bg-white border border-line rounded-card;
+  }
+}
+
+/* Gallery spotlight: hovering one tile recedes the rest, so the grid reacts as
+   a whole instead of one tile changing in isolation. Pointer devices only —
+   on touch there is no hover and every tile would sit dimmed. */
+@media (hover: hover) {
+  .gallery-grid button {
+    transition: opacity 0.35s ease;
+  }
+  .gallery-grid:has(button:hover) button:not(:hover) {
+    opacity: 0.62;
+  }
+}
+
+/* Scrollable strips keep the scrollbar out of the design; the region stays
+   keyboard-scrollable via tabindex, so hiding the bar costs no access. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Cards lift on hover, but only just. */
 .card-lift {
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
 }
 .card-lift:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.1);
-}
-
-/* Gallery cards — slight tilt */
-.gallery-tilt-left {
-  transform: rotate(-1deg);
-  transition: transform 0.3s ease;
-}
-.gallery-tilt-right {
-  transform: rotate(1deg);
-  transition: transform 0.3s ease;
-}
-.gallery-tilt-left:hover,
-.gallery-tilt-right:hover {
-  transform: rotate(0deg) scale(1.02);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 32px -12px rgba(23, 28, 38, 0.18);
 }
 
 /* Focus states */
 input:focus, textarea:focus {
-  border-color: #9B5DE5 !important;
-  box-shadow: 0 0 0 3px rgba(155, 93, 229, 0.2);
+  border-color: #E85555 !important;
+  box-shadow: 0 0 0 3px rgba(232, 85, 85, 0.15);
+}
+
+:focus-visible {
+  outline: 2px solid #E85555;
+  outline-offset: 2px;
+}
+
+/* Scroll reveal. Starts hidden only once JS has confirmed it can reveal it
+   again — see Reveal.jsx — so content is never stranded invisible. */
+.reveal {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.55s ease-out, transform 0.55s ease-out;
+}
+.reveal-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* Anyone who has asked their OS for less motion gets none of it. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
 }
