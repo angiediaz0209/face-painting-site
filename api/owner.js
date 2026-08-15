@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import { invalidate } from "./_lib/cache.js";
 import { listCalendarBookings, createOwnerBooking, updateBooking } from "./_lib/book.js";
 import {
@@ -29,52 +28,14 @@ import {
 import { optoutToken } from "./status.js";
 import { reviewToken } from "./review.js";
 import { ownerToken, clientToken } from "./_lib/tokens.js";
+import { isAuthed, passwordMatches, sessionToken, setOwnerPassword, hasCredential } from "./_lib/owner-auth.js";
 
-const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
-const OWNER_PASSWORD = process.env.OWNER_DASHBOARD_PASSWORD || "";
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || "";
 
 // Per-event token for the dashboard's one-click action links. These hit the
 // same owner-only endpoints as the email buttons (confirm, decline, reschedule),
 // so they must be signed with the OWNER token — see api/_lib/tokens.js.
 const eventToken = ownerToken;
-
-// Session token derived from the password — stored in an HttpOnly cookie so the
-// plaintext password never lives in the browser.
-function sessionToken() {
-  return crypto
-    .createHmac("sha256", CONFIRM_SECRET)
-    .update(`owner-session:${OWNER_PASSWORD}`)
-    .digest("hex")
-    .slice(0, 40);
-}
-
-function parseCookies(req) {
-  const out = {};
-  const raw = req.headers?.cookie || "";
-  for (const part of raw.split(";")) {
-    const i = part.indexOf("=");
-    if (i > 0) out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
-  }
-  return out;
-}
-
-function isAuthed(req) {
-  if (!OWNER_PASSWORD) return false;
-  const cookie = parseCookies(req).owner_session || "";
-  const expected = sessionToken();
-  return (
-    cookie.length === expected.length &&
-    crypto.timingSafeEqual(Buffer.from(cookie), Buffer.from(expected))
-  );
-}
-
-function passwordMatches(input) {
-  if (!OWNER_PASSWORD || !input) return false;
-  const a = Buffer.from(String(input));
-  const b = Buffer.from(OWNER_PASSWORD);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
 
 async function readBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
@@ -806,13 +767,42 @@ function moreLinkCard(iconName, title, sub, href) {
   </a>`;
 }
 
-export function morePage() {
+// Outcomes of a change-password attempt, keyed by the `pw` query param the
+// redirect carries back. Green for done, amber for anything to fix.
+const PW_MESSAGES = {
+  ok: ["Password changed. Other signed-in devices will need the new password.", "#e6f2e8", "#2f6b41"],
+  badcurrent: ["Current password is wrong — password not changed.", "#fdf0e6", "#a4552a"],
+  short: ["New password needs at least 8 characters.", "#fdf0e6", "#a4552a"],
+  mismatch: ["The two copies of the new password don't match.", "#fdf0e6", "#a4552a"],
+  nostore: ["Couldn't save the new password (settings storage unreachable). Nothing changed.", "#fdf0e6", "#a4552a"],
+};
+
+function changePasswordCard(pw) {
+  const msg = PW_MESSAGES[pw]
+    ? `<div style="background:${PW_MESSAGES[pw][1]};color:${PW_MESSAGES[pw][2]};border-radius:11px;padding:10px 14px;margin-top:10px;font-size:14px">${PW_MESSAGES[pw][0]}</div>`
+    : "";
+  return `<div class="card fullrow">
+      <div class="cname" style="font-size:16px">🔒 Change password</div>
+      <p class="crmeta" style="margin-top:4px">For signing in to this dashboard. Changing it signs out every other device.</p>
+      ${msg}
+      <form method="POST" action="/api/owner" class="bform" style="margin-top:10px">
+        <input type="hidden" name="action" value="change-password">
+        <input class="bin" type="password" name="current" placeholder="Current password" autocomplete="current-password" required>
+        <input class="bin" type="password" name="next" placeholder="New password (8+ characters)" autocomplete="new-password" minlength="8" required>
+        <input class="bin" type="password" name="confirm" placeholder="New password again" autocomplete="new-password" minlength="8" required>
+        <button class="btn btn-confirm" type="submit">Change password</button>
+      </form>
+    </div>`;
+}
+
+export function morePage(pw = "") {
   const content = `
-    <div class="vhead"><div><h1>More</h1><p class="sub">Chats, reviews, and your gallery</p></div></div>
+    <div class="vhead"><div><h1>More</h1><p class="sub">Chats, reviews, gallery, and settings</p></div></div>
     <div class="cardgrid">
       ${moreLinkCard("chat", "Chats", "Conversations that ended in a booking or a lead", navHref("chats"))}
       ${moreLinkCard("star", "Reviews", "Moderate and share client reviews", navHref("reviews"))}
       ${moreLinkCard("image", "Gallery", "Manage the photos on your website", navHref("gallery"))}
+      ${changePasswordCard(pw)}
     </div>`;
   return shellPage("More · Face Painting CA", appShell("more", content), DASHBOARD_SCRIPT);
 }
@@ -1186,7 +1176,7 @@ export default async function handler(req, res) {
 
   // Gallery photo upload: raw (resized) image body, owner cookie required.
   if (req.method === "POST" && url0.searchParams.get("action") === "gallery-upload") {
-    if (!isAuthed(req)) {
+    if (!(await isAuthed(req))) {
       res.statusCode = 403;
       return res.end("Not authorized");
     }
@@ -1220,7 +1210,7 @@ export default async function handler(req, res) {
     }
   }
 
-  if (!OWNER_PASSWORD) {
+  if (!(await hasCredential())) {
     return html(503, shellPage("Setup needed", `<div class="login"><h1>Setup needed</h1><p class="sub">Set the <code>OWNER_DASHBOARD_PASSWORD</code> environment variable to enable this page.</p></div>`));
   }
 
@@ -1234,7 +1224,31 @@ export default async function handler(req, res) {
 
     // An authed action (booking, client/lead, promo, opt-out forms).
     if (body.action) {
-      if (!isAuthed(req)) return html(200, loginPage("Please sign in again."));
+      if (!(await isAuthed(req))) return html(200, loginPage("Please sign in again."));
+
+      // Password change is handled here rather than in handleAction: it needs
+      // per-error feedback and, on success, a fresh session cookie — changing
+      // the password rotates the token every signed-in browser holds.
+      if (body.action === "change-password") {
+        const finish = (code) => {
+          res.statusCode = 303;
+          res.setHeader("Location", `/api/owner?view=more&pw=${code}`);
+          return res.end();
+        };
+        if (!(await passwordMatches(body.current))) return finish("badcurrent");
+        const next = String(body.next || "");
+        if (next.length < 8) return finish("short");
+        if (next !== String(body.confirm || "")) return finish("mismatch");
+        try {
+          if (!(await setOwnerPassword(next))) return finish("nostore");
+        } catch (error) {
+          console.error("Password change error:", error);
+          return finish("nostore");
+        }
+        res.setHeader("Set-Cookie", `owner_session=${await sessionToken()}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000`);
+        return finish("ok");
+      }
+
       const proto = req.headers["x-forwarded-proto"] || (String(req.headers.host || "").includes("localhost") ? "http" : "https");
       const base = `${proto}://${req.headers.host}`;
       let actionResult;
@@ -1258,12 +1272,12 @@ export default async function handler(req, res) {
     }
 
     // Otherwise it's a login attempt.
-    if (!passwordMatches(body.password)) {
+    if (!(await passwordMatches(body.password))) {
       return html(401, loginPage("Incorrect password. Try again."));
     }
-    res.setHeader("Set-Cookie", `owner_session=${sessionToken()}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000`);
+    res.setHeader("Set-Cookie", `owner_session=${await sessionToken()}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000`);
     // fall through to render the dashboard
-  } else if (!isAuthed(req)) {
+  } else if (!(await isAuthed(req))) {
     return html(200, loginPage(""));
   }
 
@@ -1284,7 +1298,7 @@ export default async function handler(req, res) {
       return html(200, chatsPage(await getConversations()));
     }
     if (view === "more") {
-      return html(200, morePage());
+      return html(200, morePage(params.get("pw") || ""));
     }
     if (view === "clients") {
       // Leads is a toggle within Clients now, not a separate destination — same

@@ -1,37 +1,14 @@
-import crypto from "crypto";
 import { moveBooking } from "./_lib/book.js";
 import { syncBookingsToSheet } from "./_lib/sheets.js";
 import { sendEmail, clientConfirmationHtml } from "./_lib/email.js";
 import { clientToken } from "./_lib/tokens.js";
+import { isAuthed } from "./_lib/owner-auth.js";
 
-const CONFIRM_SECRET = process.env.CRON_SECRET || "dev-confirm-secret";
-const OWNER_PASSWORD = process.env.OWNER_DASHBOARD_PASSWORD || "";
 const BASE_URL = process.env.APP_BASE_URL || "https://face-painting-site.vercel.app";
-
-// Must match api/owner.js so the dashboard's session cookie verifies here.
-function sessionToken() {
-  return crypto
-    .createHmac("sha256", CONFIRM_SECRET)
-    .update(`owner-session:${OWNER_PASSWORD}`)
-    .digest("hex")
-    .slice(0, 40);
-}
 
 // The client's status link (see api/_lib/tokens.js for why this is scoped).
 function statusToken(eventId) {
   return clientToken(eventId);
-}
-
-function isAuthed(req) {
-  if (!OWNER_PASSWORD) return false;
-  const raw = req.headers?.cookie || "";
-  let cookie = "";
-  for (const part of raw.split(";")) {
-    const i = part.indexOf("=");
-    if (i > 0 && part.slice(0, i).trim() === "owner_session") cookie = decodeURIComponent(part.slice(i + 1).trim());
-  }
-  const expected = sessionToken();
-  return cookie.length === expected.length && crypto.timingSafeEqual(Buffer.from(cookie), Buffer.from(expected));
 }
 
 async function readBody(req) {
@@ -49,7 +26,7 @@ function backToDashboard(res, code = 303) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== "POST" || !isAuthed(req)) {
+  if (req.method !== "POST" || !(await isAuthed(req))) {
     res.statusCode = 403;
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.end("<h2>Not authorized</h2>");
