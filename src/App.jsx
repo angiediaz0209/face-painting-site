@@ -160,21 +160,21 @@ export default function App() {
                 415-991-9374
               </a>
             </p>
-
-            {/* The proof, on the same ground as the claim. Recoloured rather
-                than moved: ink-on-white would be invisible here, so the label
-                carries the weight in white and the detail drops back to /45 —
-                the same two-tier contrast the closing band uses. Kept below the
-                CTA so the panel still ends on its primary action. */}
-            <dl className="animate-fade-up-3 mt-8 pt-6 border-t border-white/10 grid grid-cols-1 sm:grid-cols-3 gap-y-5 sm:gap-y-0 sm:divide-x sm:divide-white/10">
-              {facts.map(([label, detail]) => (
-                <div key={label} className="sm:px-5">
-                  <dt className="font-body text-[13px] font-bold tracking-wide text-white">{label}</dt>
-                  <dd className="font-body text-[13px] text-white/45 mt-1">{detail}</dd>
-                </div>
-              ))}
-            </dl>
           </div>
+        </section>
+
+        {/* The proof, in its own strip straight under the hero — the same slot
+            the trust badges held. Light ground, so the labels carry in ink and
+            the detail drops back to slate. */}
+        <section className="bg-white border-b border-line">
+          <dl className="max-w-4xl mx-auto px-5 sm:px-8 py-6 grid grid-cols-1 sm:grid-cols-3 gap-y-5 sm:gap-y-0 sm:divide-x sm:divide-line text-center">
+            {facts.map(([label, detail]) => (
+              <div key={label} className="sm:px-5">
+                <dt className="font-body text-[13px] font-bold tracking-wide text-ink">{label}</dt>
+                <dd className="font-body text-[13px] text-slate mt-1">{detail}</dd>
+              </div>
+            ))}
+          </dl>
         </section>
 
         <Gallery />
