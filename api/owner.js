@@ -37,6 +37,14 @@ const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || "";
 // so they must be signed with the OWNER token — see api/_lib/tokens.js.
 const eventToken = ownerToken;
 
+// `Secure` makes Safari drop the cookie over plain-http localhost, which shows
+// up as "the password isn't accepted": login succeeds but every next request
+// bounces back to the login page. Skip the flag only there; deploys are https.
+function sessionCookie(req, token) {
+  const secure = String(req.headers?.host || "").includes("localhost") ? "" : " Secure;";
+  return `owner_session=${token}; HttpOnly;${secure} SameSite=Lax; Path=/; Max-Age=2592000`;
+}
+
 async function readBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
   const chunks = [];
@@ -76,6 +84,9 @@ function loginPage(error) {
       <p class="sub">Enter the owner password to continue.</p>
       <form method="POST" action="/api/owner">
         <input type="password" name="password" placeholder="Password" autofocus required>
+        <label style="display:flex;align-items:center;gap:7px;font-size:14px;color:#7a7466;margin-bottom:10px;cursor:pointer">
+          <input type="checkbox" style="width:auto;margin:0;padding:0" onchange="this.form.password.type=this.checked?'text':'password'"> Show password
+        </label>
         <button class="btn btn-add" type="submit">Sign in</button>
         ${error ? `<div class="err">${error}</div>` : ""}
       </form>
@@ -790,6 +801,9 @@ function changePasswordCard(pw) {
         <input class="bin" type="password" name="current" placeholder="Current password" autocomplete="current-password" required>
         <input class="bin" type="password" name="next" placeholder="New password (8+ characters)" autocomplete="new-password" minlength="8" required>
         <input class="bin" type="password" name="confirm" placeholder="New password again" autocomplete="new-password" minlength="8" required>
+        <label style="display:flex;align-items:center;gap:7px;font-size:14px;color:#7a7466;cursor:pointer">
+          <input type="checkbox" style="width:auto" onchange="for(var n of ['current','next','confirm']) this.form[n].type=this.checked?'text':'password'"> Show passwords
+        </label>
         <button class="btn btn-confirm" type="submit">Change password</button>
       </form>
     </div>`;
@@ -959,8 +973,11 @@ const TIMING_WARNINGS = {
   tight: "⚠️ Tight fit: not a lot of breathing room against another booking the same day. Worth a second look.",
 };
 
-export function dashboardPage(bookings, ym, secondArtistAvailable = false, warn = "") {
+export function dashboardPage(bookings, ym, secondArtistAvailable = false, warn = "", loadError = false) {
   const today = todayPacific();
+  const errorBanner = loadError
+    ? `<div class="empty" style="background:#fdeaea;color:#a43b32;border-radius:11px;padding:12px 16px;margin-bottom:14px">⚠️ Couldn't reach Google Calendar, so bookings can't be shown right now. On a local dev server this usually means Google credentials aren't set in <code>.env.local</code>; otherwise check the server logs.</div>`
+    : "";
   const warnBanner = TIMING_WARNINGS[warn]
     ? `<div class="empty" style="background:#fdf0e6;color:#a4552a;border-radius:11px;padding:12px 16px;margin-bottom:14px">${TIMING_WARNINGS[warn]}</div>`
     : "";
@@ -1000,6 +1017,7 @@ export function dashboardPage(bookings, ym, secondArtistAvailable = false, warn 
       </div>
       ${addEventButton()}
     </div>
+    ${errorBanner}
     ${warnBanner}
     ${toggle}
     ${addEventDrawer()}
@@ -1245,7 +1263,7 @@ export default async function handler(req, res) {
           console.error("Password change error:", error);
           return finish("nostore");
         }
-        res.setHeader("Set-Cookie", `owner_session=${await sessionToken()}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000`);
+        res.setHeader("Set-Cookie", sessionCookie(req, await sessionToken()));
         return finish("ok");
       }
 
@@ -1275,7 +1293,7 @@ export default async function handler(req, res) {
     if (!(await passwordMatches(body.password))) {
       return html(401, loginPage("Incorrect password. Try again."));
     }
-    res.setHeader("Set-Cookie", `owner_session=${await sessionToken()}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000`);
+    res.setHeader("Set-Cookie", sessionCookie(req, await sessionToken()));
     // fall through to render the dashboard
   } else if (!(await isAuthed(req))) {
     return html(200, loginPage(""));
@@ -1331,8 +1349,18 @@ export default async function handler(req, res) {
       return html(200, pastPage(past, base));
     }
 
-    const bookings = await listCalendarBookings();
-    return html(200, dashboardPage(bookings, params.get("ym"), await isSecondArtistAvailable(), params.get("warn")));
+    // A calendar outage (or, locally, missing Google credentials) must not take
+    // down the whole dashboard right after a successful login — render the
+    // shell with a banner instead so it's clearly not a password problem.
+    let bookings = [];
+    let loadError = false;
+    try {
+      bookings = await listCalendarBookings();
+    } catch (error) {
+      console.error("Calendar load error:", error);
+      loadError = true;
+    }
+    return html(200, dashboardPage(bookings, params.get("ym"), await isSecondArtistAvailable(), params.get("warn"), loadError));
   } catch (error) {
     console.error("Owner dashboard error:", error);
     return html(500, shellPage("Error", `<div class="login"><h1>Something went wrong</h1><p class="sub">Couldn't load the dashboard. Check the server logs.</p></div>`));
