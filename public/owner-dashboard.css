@@ -5,106 +5,128 @@
    traditional multi-page app, no client-side router, so every nav is a full
    document load. If you change this, bump the ?v= query in shellPage()'s
    <link> tag in api/owner.js so browsers with the old copy cached pick up
-   the change immediately instead of waiting out their own cache heuristics. */
+   the change immediately instead of waiting out their own cache heuristics.
+
+   Palette and type mirror the marketing site (see tailwind.config.js):
+   brand #E85555 / #D14545 / deep #B93B3B / tint #FBEDEB, amber #D9922B /
+   deep #A96A12, ink #211A19 / #3A2C2A, slate #6B5F5C, mist #948784,
+   line #E9DFD5, sand #FBF7F3 / #F3EBE2. Depth comes from hairline borders,
+   not heavy drop shadows. */
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 :root{color-scheme:light}
 *{box-sizing:border-box}
-body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:#e9e2d4;color:#2b2a28;-webkit-font-smoothing:antialiased}
+body{margin:0;font-family:'Plus Jakarta Sans',system-ui,-apple-system,sans-serif;background:#F3EBE2;color:#211A19;-webkit-font-smoothing:antialiased}
 a{color:inherit}
 
 /* App shell */
 .app{max-width:660px;margin:0 auto;padding:14px 12px 48px}
 @media(min-width:900px){
-  .app{max-width:1180px;margin:26px auto;padding:0;background:#f6f0e4;border-radius:24px;overflow:hidden;box-shadow:0 14px 46px rgba(70,45,20,.10);
+  .app{max-width:1180px;margin:26px auto;padding:0;background:#FBF7F3;border-radius:14px;overflow:hidden;border:1px solid #E9DFD5;box-shadow:0 12px 32px -12px rgba(23,28,38,.18);
     display:grid;grid-template-columns:minmax(0,1fr) 430px;grid-template-rows:auto auto 1fr;
     grid-template-areas:"head cal" "add cal" "list cal"}
   .a-head{grid-area:head;padding:34px 32px 0 38px}
   .a-add{grid-area:add;padding:18px 32px 2px 38px}
   .a-list{grid-area:list;padding:14px 32px 42px 38px}
-  .a-cal{grid-area:cal;background:#fff;border-left:1px solid #ece2d1;padding:30px 30px 34px}
+  .a-cal{grid-area:cal;background:#fff;border-left:1px solid #E9DFD5;padding:30px 30px 34px}
 }
 .a-head{padding:6px 6px 0}
 .a-add{padding:12px 6px 2px}
 .a-cal{padding:8px 2px}
 .a-list{padding:8px 6px 0}
 
-h1{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:30px;font-weight:800;letter-spacing:-.5px;margin:2px 0 4px}
-.sub{color:#a29a8b;font-size:14px;margin:0}
-.sec{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#b0a692;margin:26px 0 12px}
+h1{font-family:'Fraunces',Georgia,serif;font-variation-settings:'opsz' 96,'SOFT' 40,'WONK' 1;font-size:30px;font-weight:600;letter-spacing:-.015em;margin:2px 0 4px}
+.sub{color:#948784;font-size:14px;margin:0}
+.sec{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.6px;color:#6B5F5C;margin:26px 0 12px}
 
-/* Buttons */
-.btn{display:inline-block;border:none;border-radius:22px;padding:9px 18px;font-size:14px;font-weight:700;text-decoration:none;cursor:pointer;font-family:inherit}
-.btn-add{background:#b0542e;color:#fff;padding:11px 20px;border-radius:24px;font-size:15px}
-.btn-cancel{background:#efe6d6;color:#a94e2a}
-.btn-resched{background:#f1d8c6;color:#a94e2a}
-.btn-confirm{background:#5f8c6b;color:#fff}
+/* Buttons: same shape language as the site (.btn-primary / .btn-ghost) */
+.btn{display:inline-block;border:none;border-radius:10px;padding:9px 18px;font-size:14px;font-weight:600;text-decoration:none;cursor:pointer;font-family:inherit;transition:background-color .15s ease,border-color .15s ease}
+.btn-add{background:#E85555;color:#fff;padding:11px 20px;font-size:15px}
+.btn-add:hover{background:#D14545}
+.btn-cancel{background:#fff;color:#B93B3B;border:1px solid #E9DFD5}
+.btn-cancel:hover{border-color:#B93B3B}
+.btn-resched{background:#F3EBE2;color:#3A2C2A}
+.btn-resched:hover{background:#E9DFD5}
+.btn-confirm{background:#E85555;color:#fff}
+.btn-confirm:hover{background:#D14545}
 
 /* Header: title on the left, Add event button pinned top-right */
 .a-head-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
 .a-head-row .btn-add{flex-shrink:0;white-space:nowrap;margin-top:4px}
 
-/* Cards */
-.card{position:relative;background:#fff;border:1px solid #efe6d6;border-radius:16px;padding:20px 20px 16px;margin-bottom:14px;
-  transition:box-shadow .16s ease,border-color .16s ease}
-.card:hover,.card.hl{border-color:#e6c4a6;box-shadow:0 8px 24px rgba(120,70,40,.13)}
-.card.req{border-color:#eccf9a;background:#fdf8ee}
+/* Cards: white surface, hairline border, lift only on hover */
+.card{position:relative;background:#fff;border:1px solid #E9DFD5;border-radius:14px;padding:20px 20px 16px;margin-bottom:14px;
+  box-shadow:0 1px 2px rgba(23,28,38,.04);transition:box-shadow .16s ease,border-color .16s ease}
+.card:hover,.card.hl{border-color:#D8C8BB;box-shadow:0 12px 32px -12px rgba(23,28,38,.18)}
+.card.req{border-color:#E0CBA4}
 .crow{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
-.cname{font-family:Georgia,'Iowan Old Style','Times New Roman',serif;font-size:21px;font-weight:700;color:#2b2a28;line-height:1.2}
-.cwhen{color:#7c8676;font-size:14.5px;margin-top:7px}
-.cloc{color:#b3ab9c;font-size:14px;margin-top:4px}
-.creq{color:#9a6a00;font-size:13.5px;margin-top:8px}
-.badge{font-size:12px;font-weight:700;padding:5px 13px;border-radius:16px;white-space:nowrap;flex-shrink:0}
-.b-confirmed{background:#e3ede1;color:#4c7a58}
-.b-pending{background:#f6e6d2;color:#a9752f}
-.b-cancelled{background:#eceae6;color:#8a8378}
-.b-reschedule{background:#f7ead0;color:#9a6a00}
+.cname{font-family:'Fraunces',Georgia,serif;font-variation-settings:'opsz' 96,'SOFT' 40,'WONK' 1;font-size:21px;font-weight:600;letter-spacing:-.015em;color:#211A19;line-height:1.2}
+.cwhen{color:#3A2C2A;font-size:14.5px;margin-top:7px}
+.cloc{color:#948784;font-size:14px;margin-top:4px}
+.creq{color:#A96A12;font-size:13.5px;margin-top:8px}
+/* Status chips: small caps labels, tinted ground — the same register as the
+   site's eyebrow labels rather than saturated pills. */
+.badge,.pill{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:5px 10px;border-radius:7px;white-space:nowrap;flex-shrink:0}
+.b-confirmed{background:#EDF4EE;color:#3D6B48}
+.b-pending{background:#F8F0DE;color:#8A6414}
+.b-cancelled{background:#F1ECE7;color:#8A7F7A}
+.b-reschedule{background:#F8F0DE;color:#8A6414}
+
+/* Notes: quiet inline messages — tinted ground with a hairline of the same
+   hue, dark text. No emoji, no saturated fills. */
+.note{border-radius:10px;padding:11px 14px;font-size:14px;line-height:1.55;text-align:left}
+.note-ok{background:#F0F6F1;border:1px solid #D4E4D7;color:#3D6B48}
+.note-warn{background:#FBF5E7;border:1px solid #EBDCB8;color:#7A5814}
+.note-err{background:#FBF0EF;border:1px solid #EFD2CE;color:#9A3838}
 .cactions{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin-top:16px}
 .cactions .spacer{flex:1}
-.editlink{color:#a29a8b;font-size:14px;font-weight:600;text-decoration:none;cursor:pointer}
-.editlink:hover{color:#8a8378}
+.editlink{color:#948784;font-size:14px;font-weight:600;text-decoration:none;cursor:pointer}
+.editlink:hover{color:#6B5F5C}
 
 /* Drawers (reschedule / edit / add forms) */
 .drawer{margin-top:14px}
 .drawer[hidden]{display:none}
 .bform{display:flex;flex-direction:column;gap:9px}
-.bform .bin,.form-row input{padding:11px 12px;border:1px solid #e7ddcc;border-radius:11px;font-size:16px;width:100%;background:#fdfbf6;font-family:inherit}
+.bform .bin,.form-row input{padding:11px 12px;border:1px solid #E9DFD5;border-radius:10px;font-size:16px;width:100%;background:#FBF7F3;font-family:inherit;color:#211A19}
+.bform .bin:focus,.form-row input:focus{outline:2px solid #E85555;outline-offset:-1px;background:#fff}
 .bform textarea.bin{resize:vertical}
 .form-row{display:flex;gap:8px;flex-wrap:wrap}
 .form-row input{flex:1;min-width:120px}
-.gcal{display:inline-block;margin-top:6px;font-size:14px;font-weight:700;color:#b0542e;text-decoration:none}
-.empty{color:#a29a8b;text-align:center;padding:30px 0}
+.gcal{display:inline-block;margin-top:6px;font-size:14px;font-weight:700;color:#B93B3B;text-decoration:none}
+.empty{color:#948784;text-align:center;padding:30px 0}
 
 /* Details drawer (read-only extra info) */
-.details{border-top:1px solid #f0e8d9;padding-top:13px}
+.details{border-top:1px solid #E9DFD5;padding-top:13px}
 .drow{display:flex;gap:12px;font-size:14.5px;margin-bottom:8px}
-.dk{flex:0 0 62px;color:#b0a692;font-weight:700}
-.dv{color:#4a4740;white-space:pre-wrap;word-break:break-word;min-width:0}
-.dv a{color:#b0542e;text-decoration:none}
+.dk{flex:0 0 62px;color:#948784;font-weight:700}
+.dv{color:#3A2C2A;white-space:pre-wrap;word-break:break-word;min-width:0}
+.dv a{color:#B93B3B;text-decoration:none}
 .dv a:hover{text-decoration:underline}
-.dempty{color:#a29a8b;font-size:14px}
+.dempty{color:#948784;font-size:14px}
 
 /* Calendar */
-.calbox{background:#fff;border:1px solid #efe6d6;border-radius:16px;padding:18px 16px}
+.calbox{background:#fff;border:1px solid #E9DFD5;border-radius:14px;padding:18px 16px;box-shadow:0 1px 2px rgba(23,28,38,.04)}
 .month{max-width:400px;margin:0 auto}
 .month.second{display:none}
-@media(min-width:900px){ .month.second{display:block;margin-top:26px;padding-top:22px;border-top:1px solid #f0e8d9} }
+@media(min-width:900px){ .month.second{display:block;margin-top:26px;padding-top:22px;border-top:1px solid #E9DFD5} }
 .mnav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.mtitle{font-family:Georgia,'Iowan Old Style','Times New Roman',serif;font-size:19px;font-weight:700;color:#2b2a28;flex:1;text-align:center}
+.mtitle{font-family:'Fraunces',Georgia,serif;font-variation-settings:'opsz' 96,'SOFT' 40,'WONK' 1;font-size:19px;font-weight:600;color:#211A19;flex:1;text-align:center}
 .mtitle.left{text-align:left}
-.marw{width:30px;height:30px;line-height:28px;text-align:center;color:#b3ab9c;text-decoration:none;font-size:20px;border-radius:8px}
-.marw:hover{color:#b0542e;background:#f3ece0}
-.cdow{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:11px;font-weight:700;letter-spacing:.5px;color:#b7ae9c;margin-bottom:6px}
+.marw{width:30px;height:30px;line-height:28px;text-align:center;color:#948784;text-decoration:none;font-size:20px;border-radius:8px}
+.marw:hover{color:#B93B3B;background:#F3EBE2}
+.cdow{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:11px;font-weight:700;letter-spacing:.5px;color:#948784;margin-bottom:6px}
 .cgrid{display:grid;grid-template-columns:repeat(7,1fr);row-gap:8px}
 .cd{display:flex;flex-direction:column;align-items:center;min-height:44px}
-.cn{font-family:Georgia,'Iowan Old Style','Times New Roman',serif;font-size:15px;color:#2b2a28;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:30px;border-radius:15px}
-.cd.muted .cn{color:#cfc6b3}
-.cd.today .cn{background:#b0542e;color:#fff}
-.cd.hl .cn{background:#f1d8c6;color:#a94e2a}
-.cd.today.hl .cn{background:#b0542e;color:#fff}
+.cn{font-size:14px;color:#211A19;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:30px;border-radius:15px}
+.cd.muted .cn{color:#CFC5BD}
+.cd.today .cn{background:#E85555;color:#fff}
+.cd.hl .cn{background:#FBEDEB;color:#B93B3B}
+.cd.today.hl .cn{background:#E85555;color:#fff}
 .dots{display:flex;justify-content:center;gap:3px;margin-top:3px}
-.dot{width:5px;height:5px;border-radius:50%;background:#b0542e}
-.cd.today .dot{background:#b0542e}
-.callink{display:inline-block;margin-top:16px;font-size:13px;color:#b0542e;text-decoration:none}
+.dot{width:5px;height:5px;border-radius:50%;background:#E85555}
+.cd.today .dot{background:#E85555}
+.callink{display:inline-block;margin-top:16px;font-size:13px;color:#B93B3B;text-decoration:none}
 
 /* ── App shell: sidebar (desktop) + content ─────────────────────────────── */
 .shell{min-height:100vh}
@@ -113,27 +135,27 @@ h1{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-
 @media(min-width:900px){
   .shell{display:grid;grid-template-columns:236px minmax(0,1fr)}
   .sidebar{display:flex;flex-direction:column;position:sticky;top:0;align-self:start;height:100vh;
-    background:#f6f0e4;border-right:1px solid #ece2d1;padding:24px 16px}
+    background:#fff;border-right:1px solid #E9DFD5;padding:24px 16px}
   .content{max-width:1120px;margin:0;padding:30px 40px 60px}
 }
 .brand{display:flex;align-items:center;gap:10px;padding:4px 8px 4px 6px;margin-bottom:18px}
-.brand .bt{display:flex;flex-direction:column;font-family:Georgia,'Iowan Old Style','Times New Roman',serif;line-height:1.05;color:#2b2a28;font-size:16px;font-weight:700}
-.brand .bt b{font-weight:400;font-size:12px;color:#a29a8b;letter-spacing:.5px;text-transform:uppercase}
+.brand .bt{display:flex;flex-direction:column;font-family:'Fraunces',Georgia,serif;font-variation-settings:'opsz' 96,'SOFT' 40,'WONK' 1;line-height:1.05;color:#211A19;font-size:16px;font-weight:600}
+.brand .bt b{font-weight:700;font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:11px;color:#B93B3B;letter-spacing:1.4px;text-transform:uppercase}
 .sidenav{display:flex;flex-direction:column;gap:3px}
-.sidenav a{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:12px;text-decoration:none;color:#7c7566;font-weight:700;font-size:15px}
+.sidenav a{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;text-decoration:none;color:#6B5F5C;font-weight:600;font-size:15px}
 .sidenav a .si{display:flex;line-height:0}
 .sidenav a .si svg{width:20px;height:20px}
-.sidenav a:hover{background:#efe6d6;color:#2b2a28}
-.sidenav a.on{background:#b0542e;color:#fff}
+.sidenav a:hover{background:#FBF7F3;color:#211A19}
+.sidenav a.on{background:#F3EBE2;color:#211A19}
 
 /* View header (title + optional action) */
 .vhead{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:14px}
 
 /* Segmented toggle (Bookings: Upcoming/Past, Clients: Clients/Leads) */
-.seg{display:flex;background:#efe6d6;border-radius:12px;padding:3px;margin-bottom:16px;gap:2px;max-width:340px}
-.seg a{flex:1;text-align:center;text-decoration:none;padding:9px 10px;border-radius:9px;
-  font-size:13.5px;font-weight:700;color:#7c7566}
-.seg a.on{background:#fff;color:#b0542e;box-shadow:0 1px 3px rgba(70,45,20,.14)}
+.seg{display:flex;background:#F3EBE2;border-radius:10px;padding:3px;margin-bottom:16px;gap:2px;max-width:340px}
+.seg a{flex:1;text-align:center;text-decoration:none;padding:9px 10px;border-radius:8px;
+  font-size:13.5px;font-weight:600;color:#6B5F5C}
+.seg a.on{background:#fff;color:#211A19;box-shadow:0 1px 3px rgba(23,28,38,.12)}
 
 /* Bookings two-pane + responsive card grids for the CRM views */
 .bkgrid{display:grid;grid-template-columns:1fr;gap:22px}
@@ -144,7 +166,7 @@ h1{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-
 
 /* Gallery manager */
 .galgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
-.galcard{position:relative;border-radius:14px;overflow:hidden;background:#fff;border:1px solid #efe6d6}
+.galcard{position:relative;border-radius:14px;overflow:hidden;background:#fff;border:1px solid #E9DFD5}
 .galcard img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover}
 .galcard form{position:absolute;top:8px;right:8px;margin:0}
 .galcard .btn{padding:6px 12px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.18)}
@@ -153,33 +175,37 @@ h1{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-
 .tabbar{display:none}
 @media(max-width:899px){
   .tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;background:#fff;
-    border-top:1px solid #ece2d1;box-shadow:0 -6px 22px rgba(70,45,20,.07);
+    border-top:1px solid #E9DFD5;box-shadow:0 -6px 22px rgba(23,28,38,.06);
     padding:7px 2px calc(7px + env(safe-area-inset-bottom))}
   .tabbar a{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;
-    text-decoration:none;color:#a29a8b;font-size:9.5px;font-weight:700;padding:3px 1px}
+    text-decoration:none;color:#948784;font-size:9.5px;font-weight:700;padding:3px 1px}
   .tabbar a .ic{line-height:0}
   .tabbar a .ic svg{width:23px;height:23px;display:block}
   .tabbar a span.lbl{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .tabbar a.on{color:#b0542e}
+  .tabbar a.on{color:#B93B3B}
   .content{padding-top:calc(6px + env(safe-area-inset-top))}
 }
 
 /* CRM page extras */
 .headrow{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:6px}
-.fmeta{color:#7c8676;font-size:14.5px;margin-top:7px}
-.fsub{color:#b3ab9c;font-size:14px;margin-top:4px}
-.crmeta{color:#8a8378;font-size:13.5px;margin-top:4px}
+.fmeta{color:#3A2C2A;font-size:14.5px;margin-top:7px}
+.fsub{color:#948784;font-size:14px;margin-top:4px}
+.crmeta{color:#6B5F5C;font-size:13.5px;margin-top:4px}
 .copybox{margin-top:12px}
-.copybox textarea{width:100%;border:1px solid #e7ddcc;border-radius:11px;padding:11px 12px;font-size:14px;font-family:inherit;background:#fdfbf6;resize:vertical;color:#4a4740;line-height:1.5}
-.days{font-size:12px;font-weight:700;padding:5px 12px;border-radius:16px;background:#f6e6d2;color:#a9752f;white-space:nowrap;flex-shrink:0}
-.btn-text{background:#5f8c6b;color:#fff}
-.btn-copy{background:#efe6d6;color:#7c5a2a}
-.btn-plain{background:none;border:none;cursor:pointer;color:#a29a8b;font-size:13px;font-weight:600;font-family:inherit;padding:6px 4px}
-.btn-plain:hover{color:#8a8378}
-.hint{color:#b3ab9c;font-size:13px;margin:2px 2px 8px}
+.copybox textarea{width:100%;border:1px solid #E9DFD5;border-radius:10px;padding:11px 12px;font-size:14px;font-family:inherit;background:#FBF7F3;resize:vertical;color:#3A2C2A;line-height:1.5}
+.days{font-size:12px;font-weight:700;padding:5px 11px;border-radius:7px;background:#F8F0DE;color:#8A6414;white-space:nowrap;flex-shrink:0}
+.btn-text{background:#E85555;color:#fff}
+.btn-text:hover{background:#D14545}
+.btn-copy{background:#F3EBE2;color:#6B5F5C}
+.btn-copy:hover{background:#E9DFD5}
+.btn-plain{background:none;border:none;cursor:pointer;color:#948784;font-size:13px;font-weight:600;font-family:inherit;padding:6px 4px}
+.btn-plain:hover{color:#6B5F5C}
+.hint{color:#948784;font-size:13px;margin:2px 2px 8px}
 
 /* Login */
-.login{max-width:360px;margin:70px auto;text-align:center;background:#f6f0e4;border-radius:20px;padding:34px 28px}
-.login input{width:100%;padding:12px;border:1px solid #e7ddcc;border-radius:12px;font-size:16px;margin:10px 0;background:#fff}
+.login{max-width:360px;margin:70px auto;text-align:center;background:#fff;border:1px solid #E9DFD5;border-radius:14px;padding:34px 28px;box-shadow:0 1px 2px rgba(23,28,38,.04)}
+.login h1{font-size:28px}
+.login input{width:100%;padding:12px;border:1px solid #E9DFD5;border-radius:10px;font-size:16px;margin:10px 0;background:#FBF7F3}
+.login input:focus{outline:2px solid #E85555;outline-offset:-1px;background:#fff}
 .login .btn-add{width:100%}
-.err{color:#b0402a;font-size:14px;margin-top:8px}
+.err{color:#B93B3B;font-size:14px;margin-top:8px}

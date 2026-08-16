@@ -63,11 +63,11 @@ function shellPage(title, body, script = "") {
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Bookings">
-    <meta name="theme-color" content="#f6f0e4">
+    <meta name="theme-color" content="#F3EBE2">
     <meta name="format-detection" content="telephone=no">
-    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2240%22%20fill%3D%22%23b0542e%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%2246%22%20fill%3D%22%23fff%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2279%22%20r%3D%227.5%22%20fill%3D%22%23e8836b%22%2F%3E%3Ccircle%20cx%3D%22107%22%20cy%3D%2277%22%20r%3D%227.5%22%20fill%3D%22%235f8c6b%22%2F%3E%3Ccircle%20cx%3D%22115%22%20cy%3D%22103%22%20r%3D%227.5%22%20fill%3D%22%23e2a33a%22%2F%3E%3Ccircle%20cx%3D%2280%22%20cy%3D%22113%22%20r%3D%227.5%22%20fill%3D%22%237a6cbf%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%229%22%20fill%3D%22%23f6f0e4%22%2F%3E%3C%2Fsvg%3E">
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2240%22%20fill%3D%22%23b0542e%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%2246%22%20fill%3D%22%23fff%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2279%22%20r%3D%227.5%22%20fill%3D%22%23e8836b%22%2F%3E%3Ccircle%20cx%3D%22107%22%20cy%3D%2277%22%20r%3D%227.5%22%20fill%3D%22%235f8c6b%22%2F%3E%3Ccircle%20cx%3D%22115%22%20cy%3D%22103%22%20r%3D%227.5%22%20fill%3D%22%23e2a33a%22%2F%3E%3Ccircle%20cx%3D%2280%22%20cy%3D%22113%22%20r%3D%227.5%22%20fill%3D%22%237a6cbf%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%229%22%20fill%3D%22%23f6f0e4%22%2F%3E%3C%2Fsvg%3E">
-    <link rel="stylesheet" href="/owner-dashboard.css?v=1">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2240%22%20fill%3D%22%23E85555%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%2246%22%20fill%3D%22%23fff%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2279%22%20r%3D%227.5%22%20fill%3D%22%23F6A6A6%22%2F%3E%3Ccircle%20cx%3D%22107%22%20cy%3D%2277%22%20r%3D%227.5%22%20fill%3D%22%23D9922B%22%2F%3E%3Ccircle%20cx%3D%22115%22%20cy%3D%22103%22%20r%3D%227.5%22%20fill%3D%22%23B93B3B%22%2F%3E%3Ccircle%20cx%3D%2280%22%20cy%3D%22113%22%20r%3D%227.5%22%20fill%3D%22%232A1B18%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%229%22%20fill%3D%22%23FBF7F3%22%2F%3E%3C%2Fsvg%3E">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2240%22%20fill%3D%22%23E85555%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%2246%22%20fill%3D%22%23fff%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2279%22%20r%3D%227.5%22%20fill%3D%22%23F6A6A6%22%2F%3E%3Ccircle%20cx%3D%22107%22%20cy%3D%2277%22%20r%3D%227.5%22%20fill%3D%22%23D9922B%22%2F%3E%3Ccircle%20cx%3D%22115%22%20cy%3D%22103%22%20r%3D%227.5%22%20fill%3D%22%23B93B3B%22%2F%3E%3Ccircle%20cx%3D%2280%22%20cy%3D%22113%22%20r%3D%227.5%22%20fill%3D%22%232A1B18%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%229%22%20fill%3D%22%23FBF7F3%22%2F%3E%3C%2Fsvg%3E">
+    <link rel="stylesheet" href="/owner-dashboard.css?v=4">
     <title>${title}</title>`;
   return `<!doctype html><html><head>${head}</head><body>${body}${script}</body></html>`;
 }
@@ -84,7 +84,7 @@ function loginPage(error) {
       <p class="sub">Enter the owner password to continue.</p>
       <form method="POST" action="/api/owner">
         <input type="password" name="password" placeholder="Password" autofocus required>
-        <label style="display:flex;align-items:center;gap:7px;font-size:14px;color:#7a7466;margin-bottom:10px;cursor:pointer">
+        <label style="display:flex;align-items:center;gap:7px;font-size:14px;color:#6B5F5C;margin-bottom:10px;cursor:pointer">
           <input type="checkbox" style="width:auto;margin:0;padding:0" onchange="this.form.password.type=this.checked?'text':'password'"> Show password
         </label>
         <button class="btn btn-add" type="submit">Sign in</button>
@@ -408,7 +408,7 @@ const NAV_ITEMS = [
 ];
 const navHref = (k) => `/api/owner${k === "bookings" ? "" : `?view=${k}`}`;
 
-const BRAND_MARK = `<svg width="30" height="30" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#b0542e"/><circle cx="20" cy="21" r="10.5" fill="#fff"/><circle cx="16" cy="17" r="2" fill="#e8836b"/><circle cx="24" cy="16.5" r="2" fill="#5f8c6b"/><circle cx="25.5" cy="23" r="2" fill="#e2a33a"/><circle cx="17.5" cy="25.5" r="2" fill="#7a6cbf"/><circle cx="20" cy="21" r="2.4" fill="#f6f0e4"/></svg>`;
+const BRAND_MARK = `<svg width="30" height="30" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#E85555"/><circle cx="20" cy="21" r="10.5" fill="#fff"/><circle cx="16" cy="17" r="2" fill="#F6A6A6"/><circle cx="24" cy="16.5" r="2" fill="#D9922B"/><circle cx="25.5" cy="23" r="2" fill="#B93B3B"/><circle cx="17.5" cy="25.5" r="2" fill="#2A1B18"/><circle cx="20" cy="21" r="2.4" fill="#FBF7F3"/></svg>`;
 
 function sideNav(active) {
   const links = NAV_ITEMS.map(
@@ -482,7 +482,7 @@ function followupCard(f) {
   return `<div class="card">
     <div class="crow">
       <div class="cname">${esc(f.name || "—")}</div>
-      <span class="days">🎂 in ${f.daysUntil} day${f.daysUntil === 1 ? "" : "s"}</span>
+      <span class="days">in ${f.daysUntil} day${f.daysUntil === 1 ? "" : "s"}</span>
     </div>
     <div class="fmeta">Birthday around ${esc(shortDate(f.nextBirthday))}</div>
     ${last ? `<div class="fsub">Last: ${last}</div>` : ""}
@@ -545,13 +545,13 @@ function clientCard(c, base, scope = "clients") {
       : "";
   return `<div class="card">
     <div class="crow">
-      <div class="cname">${esc(c.name || "—")}${c.organization ? ` <span style="font-weight:400;color:#a4552a">· ${esc(c.organization)}</span>` : ""}</div>
+      <div class="cname">${esc(c.name || "—")}${c.organization ? ` <span style="font-weight:400;color:#6B5F5C">· ${esc(c.organization)}</span>` : ""}</div>
       <div>${tags.join(" ")}</div>
     </div>
     ${meta ? `<div class="crmeta">${meta}</div>` : ""}
     ${last ? `<div class="crmeta">Last: ${last}${bookings}</div>` : ""}
     ${c.lastQuote ? `<div class="crmeta">💰 Last paid: $${esc(c.lastQuote)}${c.lastHours ? ` for ${esc(c.lastHours)}h` : ""}</div>` : ""}
-    ${c.birthday ? `<div class="crmeta">🎂 ${esc(c.birthday)}</div>` : ""}
+    ${c.birthday ? `<div class="crmeta">Birthday · ${esc(c.birthday)}</div>` : ""}
     ${c.notes ? `<div class="crmeta">${esc(c.notes)}</div>` : ""}
     <div class="cactions">
       ${c.phone ? `<a class="btn btn-text" href="sms:${esc(String(c.phone).replace(/[^\\d+]/g, ""))}">💬 Text</a>` : ""}
@@ -565,7 +565,7 @@ function clientCard(c, base, scope = "clients") {
         <input type="hidden" name="key" value="${key}">
         <input type="hidden" name="view" value="clients">
         ${scope === "leads" ? `<input type="hidden" name="scope" value="leads">` : ""}
-        <button class="btn-plain" type="submit" style="color:#a94e2a;">Delete</button>
+        <button class="btn-plain" type="submit" style="color:#B93B3B;">Delete</button>
       </form>
     </div>
     <div id="ec-${key}" class="drawer" hidden>
@@ -714,7 +714,7 @@ export function pastPage(past, base) {
 
 // ── Reviews (moderation) ──────────────────────────────────────────────────────
 function starRow(n) {
-  return `<span style="color:#f5b301;font-size:17px;letter-spacing:2px">${"★".repeat(n)}${"☆".repeat(5 - n)}</span>`;
+  return `<span style="color:#D9922B;font-size:17px;letter-spacing:2px">${"★".repeat(n)}${"☆".repeat(5 - n)}</span>`;
 }
 function reviewCard(r) {
   const pending = r.status !== "approved";
@@ -724,7 +724,7 @@ function reviewCard(r) {
       <span class="badge ${pending ? "b-pending" : "b-confirmed"}">${pending ? "Pending" : "Live"}</span>
     </div>
     <div class="cwhen">${starRow(r.rating)}${r.eventType ? ` · ${esc(r.eventType)}` : ""}</div>
-    <div class="crmeta" style="margin-top:8px;color:#4a4740;font-size:15px;line-height:1.5">“${esc(r.text)}”</div>
+    <div class="crmeta" style="margin-top:8px;color:#3A2C2A;font-size:15px;line-height:1.5">“${esc(r.text)}”</div>
     <div class="cactions">
       ${pending ? actionForm("review-approve", r.id, "reviews", "Approve", "btn btn-confirm") : ""}
       ${actionForm("review-reject", r.id, "reviews", pending ? "Reject" : "Hide", "btn-plain")}
@@ -743,7 +743,7 @@ export function reviewsPage(reviews, base) {
       <p class="crmeta" style="margin-top:4px">Share this with clients to collect reviews — it opens your review form.</p>
       <div class="cactions" style="margin-top:12px">
         <input id="pubreviewlink" type="text" readonly value="${esc(shareLink)}" onclick="this.select()"
-          style="flex:1;min-width:180px;padding:11px 12px;border:1px solid #e7ddcc;border-radius:11px;background:#fdfbf6;font-size:14px;color:#4a4740">
+          style="flex:1;min-width:180px;padding:11px 12px;border:1px solid #E9DFD5;border-radius:11px;background:#FBF7F3;font-size:14px;color:#3A2C2A">
         <button class="btn btn-copy" data-copy="pubreviewlink">Copy link</button>
         <a class="btn btn-text" href="sms:?&body=${encodeURIComponent(`We'd love a quick review! ${shareLink}`)}">💬 Text it</a>
       </div>
@@ -767,13 +767,13 @@ function moreLinkCard(iconName, title, sub, href) {
   return `<a class="card" href="${href}" style="display:block;text-decoration:none;color:inherit">
     <div class="crow">
       <div style="display:flex;align-items:center;gap:13px;min-width:0">
-        <span style="display:flex;color:#b0542e;flex-shrink:0">${icon(iconName)}</span>
+        <span style="display:flex;color:#B93B3B;flex-shrink:0">${icon(iconName)}</span>
         <div style="min-width:0">
           <div class="cname" style="font-size:17px">${esc(title)}</div>
           <div class="crmeta">${esc(sub)}</div>
         </div>
       </div>
-      <span style="color:#c9bfa9;font-size:20px;flex-shrink:0">›</span>
+      <span style="color:#948784;font-size:20px;flex-shrink:0">›</span>
     </div>
   </a>`;
 }
@@ -781,19 +781,19 @@ function moreLinkCard(iconName, title, sub, href) {
 // Outcomes of a change-password attempt, keyed by the `pw` query param the
 // redirect carries back. Green for done, amber for anything to fix.
 const PW_MESSAGES = {
-  ok: ["Password changed. Other signed-in devices will need the new password.", "#e6f2e8", "#2f6b41"],
-  badcurrent: ["Current password is wrong — password not changed.", "#fdf0e6", "#a4552a"],
-  short: ["New password needs at least 8 characters.", "#fdf0e6", "#a4552a"],
-  mismatch: ["The two copies of the new password don't match.", "#fdf0e6", "#a4552a"],
-  nostore: ["Couldn't save the new password (settings storage unreachable). Nothing changed.", "#fdf0e6", "#a4552a"],
+  ok: ["Password changed. Other signed-in devices will need the new password.", "note-ok"],
+  badcurrent: ["Current password is wrong — password not changed.", "note-warn"],
+  short: ["New password needs at least 8 characters.", "note-warn"],
+  mismatch: ["The two copies of the new password don't match.", "note-warn"],
+  nostore: ["Couldn't save the new password (settings storage unreachable). Nothing changed.", "note-warn"],
 };
 
 function changePasswordCard(pw) {
   const msg = PW_MESSAGES[pw]
-    ? `<div style="background:${PW_MESSAGES[pw][1]};color:${PW_MESSAGES[pw][2]};border-radius:11px;padding:10px 14px;margin-top:10px;font-size:14px">${PW_MESSAGES[pw][0]}</div>`
+    ? `<div class="note ${PW_MESSAGES[pw][1]}" style="margin-top:10px">${PW_MESSAGES[pw][0]}</div>`
     : "";
   return `<div class="card fullrow">
-      <div class="cname" style="font-size:16px">🔒 Change password</div>
+      <div class="cname" style="font-size:16px">Change password</div>
       <p class="crmeta" style="margin-top:4px">For signing in to this dashboard. Changing it signs out every other device.</p>
       ${msg}
       <form method="POST" action="/api/owner" class="bform" style="margin-top:10px">
@@ -801,7 +801,7 @@ function changePasswordCard(pw) {
         <input class="bin" type="password" name="current" placeholder="Current password" autocomplete="current-password" required>
         <input class="bin" type="password" name="next" placeholder="New password (8+ characters)" autocomplete="new-password" minlength="8" required>
         <input class="bin" type="password" name="confirm" placeholder="New password again" autocomplete="new-password" minlength="8" required>
-        <label style="display:flex;align-items:center;gap:7px;font-size:14px;color:#7a7466;cursor:pointer">
+        <label style="display:flex;align-items:center;gap:7px;font-size:14px;color:#6B5F5C;cursor:pointer">
           <input type="checkbox" style="width:auto" onchange="for(var n of ['current','next','confirm']) this.form[n].type=this.checked?'text':'password'"> Show passwords
         </label>
         <button class="btn btn-confirm" type="submit">Change password</button>
@@ -827,8 +827,8 @@ export function morePage(pw = "") {
 function conversationCard(c) {
   const badge =
     c.outcome === "booking"
-      ? `<span class="pill" style="background:#e6f2e8;color:#2f6b41">Booked</span>`
-      : `<span class="pill" style="background:#fdf0e6;color:#a4552a">Lead</span>`;
+      ? `<span class="pill b-confirmed">Booked</span>`
+      : `<span class="pill b-pending">Lead</span>`;
 
   const contact = [c.phone, c.email].filter(Boolean).join(" · ");
   const lines = (c.transcript || "").split("\n").filter(Boolean);
@@ -836,12 +836,12 @@ function conversationCard(c) {
   return `<div class="card">
       <div class="cname">${esc(c.name || "Someone")} ${badge}</div>
       <p class="crmeta" style="margin-top:4px">${esc(c.logged)}${contact ? ` · ${esc(contact)}` : ""}</p>
-      ${c.summary ? `<p class="crmeta" style="margin-top:6px;color:#4a4740">${esc(c.summary)}</p>` : ""}
+      ${c.summary ? `<p class="crmeta" style="margin-top:6px;color:#3A2C2A">${esc(c.summary)}</p>` : ""}
       <div class="cactions" style="margin-top:10px">
         <button class="btn btn-resched" data-toggle="chat-${esc(c.id)}">Read the chat</button>
       </div>
       <div id="chat-${esc(c.id)}" class="drawer" hidden>
-        <div style="background:#fdfbf6;border:1px solid #e7ddcc;border-radius:11px;padding:12px;margin-top:10px;max-height:420px;overflow:auto">
+        <div style="background:#FBF7F3;border:1px solid #E9DFD5;border-radius:11px;padding:12px;margin-top:10px;max-height:420px;overflow:auto">
           ${
             lines.length
               ? lines
@@ -849,8 +849,8 @@ function conversationCard(c) {
                     const isClient = line.startsWith("Client:");
                     const text = line.replace(/^(Client|Sky):\s*/, "");
                     return `<div style="margin-bottom:8px">
-                        <div style="font-size:11px;font-weight:700;color:${isClient ? "#a4552a" : "#7a8b9a"};text-transform:uppercase;letter-spacing:.4px">${isClient ? "Client" : "Sky"}</div>
-                        <div style="font-size:14px;color:#3a3833;white-space:pre-wrap">${esc(text)}</div>
+                        <div style="font-size:11px;font-weight:700;color:${isClient ? "#3A2C2A" : "#948784"};text-transform:uppercase;letter-spacing:.4px">${isClient ? "Client" : "Sky"}</div>
+                        <div style="font-size:14px;color:#211A19;white-space:pre-wrap">${esc(text)}</div>
                       </div>`;
                   })
                   .join("")
@@ -945,8 +945,11 @@ export function galleryPage(gallery) {
  * daily rather than buried in a settings screen.
  */
 function secondArtistToggle(available) {
-  return `<div class="card fullrow" style="border-left:4px solid ${available ? "#4e9d63" : "#c9752f"}">
-      <div class="cname" style="font-size:16px">🎨 Second artist ${available ? "available" : "unavailable"}</div>
+  return `<div class="card fullrow">
+      <div class="crow">
+        <div class="cname" style="font-size:16px">Second artist</div>
+        <span class="badge ${available ? "b-confirmed" : "b-cancelled"}">${available ? "Available" : "Not offered"}</span>
+      </div>
       <p class="crmeta" style="margin-top:4px">
         ${
           available
@@ -968,18 +971,18 @@ function secondArtistToggle(available) {
 }
 
 const TIMING_WARNINGS = {
-  overlap: "⚠️ This actually overlaps another booking's time on the same day. One artist can't be two places at once, double check this is really what you want.",
-  urgent: "⚠️ Tight fit: under 15 minutes against another booking the same day. Cutting it close.",
-  tight: "⚠️ Tight fit: not a lot of breathing room against another booking the same day. Worth a second look.",
+  overlap: "This actually overlaps another booking's time on the same day. One artist can't be two places at once, double check this is really what you want.",
+  urgent: "Tight fit: under 15 minutes against another booking the same day. Cutting it close.",
+  tight: "Tight fit: not a lot of breathing room against another booking the same day. Worth a second look.",
 };
 
 export function dashboardPage(bookings, ym, secondArtistAvailable = false, warn = "", loadError = false) {
   const today = todayPacific();
   const errorBanner = loadError
-    ? `<div class="empty" style="background:#fdeaea;color:#a43b32;border-radius:11px;padding:12px 16px;margin-bottom:14px">⚠️ Couldn't reach Google Calendar, so bookings can't be shown right now. On a local dev server this usually means Google credentials aren't set in <code>.env.local</code>; otherwise check the server logs.</div>`
+    ? `<div class="note note-err" style="margin-bottom:14px">Couldn't reach Google Calendar, so bookings can't be shown right now. On a local dev server this usually means Google credentials aren't set in <code>.env.local</code>; otherwise check the server logs.</div>`
     : "";
   const warnBanner = TIMING_WARNINGS[warn]
-    ? `<div class="empty" style="background:#fdf0e6;color:#a4552a;border-radius:11px;padding:12px 16px;margin-bottom:14px">${TIMING_WARNINGS[warn]}</div>`
+    ? `<div class="note note-warn" style="margin-bottom:14px">${TIMING_WARNINGS[warn]}</div>`
     : "";
   const month = /^\d{4}-\d{2}$/.test(ym || "") ? ym : today.slice(0, 7);
   const requests = bookings.filter((b) => b.status === "RESCHEDULE REQUESTED");
@@ -1324,8 +1327,17 @@ export default async function handler(req, res) {
       return html(200, clientsPage(await getClients(), base, scope === "leads" ? "leads" : "clients"));
     }
     if (view === "followups") {
-      // Exclude clients who already have a future booking on the calendar.
-      const [clients, bookings] = await Promise.all([getClients(), listCalendarBookings()]);
+      // Exclude clients who already have a future booking on the calendar. The
+      // calendar is only an exclusion filter here, so if it's unreachable the
+      // view still renders — worst case a follow-up shows for someone already
+      // booked, which beats an error page (see the same fallback on Bookings).
+      const [clients, bookings] = await Promise.all([
+        getClients(),
+        listCalendarBookings().catch((error) => {
+          console.error("Calendar load error (followups):", error);
+          return [];
+        }),
+      ]);
       const today = todayPacific();
       const excludeKeys = new Set(
         bookings
