@@ -408,6 +408,7 @@ function icon(name) {
     star: `<path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.6 1.1 6.45L12 17.9l-5.8 3 1.1-6.45-4.7-4.6 6.5-.95L12 2.5z"/>`,
     chat: `<path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 20.5l1.5-4.4A8.4 8.4 0 0 1 3.6 11.5a8.4 8.4 0 0 1 8.4-8.4h.5a8.4 8.4 0 0 1 8.5 8.4z"/>`,
     image: `<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>`,
+    doc: `<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/>`,
     grid: `<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>`,
   }[name] || "";
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
@@ -782,8 +783,8 @@ export function reviewsPage(reviews, base) {
 }
 
 // ── More (hub for the lower-frequency pages) ────────────────────────────────
-function moreLinkCard(iconName, title, sub, href) {
-  return `<a class="card" href="${href}" style="display:block;text-decoration:none;color:inherit">
+function moreLinkCard(iconName, title, sub, href, { newTab = false } = {}) {
+  return `<a class="card" href="${href}"${newTab ? ' target="_blank" rel="noopener"' : ""} style="display:block;text-decoration:none;color:inherit">
     <div class="crow">
       <div style="display:flex;align-items:center;gap:13px;min-width:0">
         <span style="display:flex;color:#B93B3B;flex-shrink:0">${icon(iconName)}</span>
@@ -830,11 +831,12 @@ function changePasswordCard(pw) {
 
 export function morePage(pw = "") {
   const content = `
-    <div class="vhead"><div><h1>More</h1><p class="sub">Chats, reviews, gallery, and settings</p></div></div>
+    <div class="vhead"><div><h1>More</h1><p class="sub">Chats, reviews, gallery, paperwork, and settings</p></div></div>
     <div class="cardgrid">
       ${moreLinkCard("chat", "Chats", "Conversations that ended in a booking or a lead", navHref("chats"))}
       ${moreLinkCard("star", "Reviews", "Moderate and share client reviews", navHref("reviews"))}
       ${moreLinkCard("image", "Gallery", "Manage the photos on your website", navHref("gallery"))}
+      ${moreLinkCard("doc", "Blank agreement", "Print an unfilled copy of the booking agreement to sign on paper", "/api/status?action=contract-blank", { newTab: true })}
       ${changePasswordCard(pw)}
     </div>`;
   return shellPage("More · Face Painting CA", appShell("more", content), DASHBOARD_SCRIPT);

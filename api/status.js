@@ -218,6 +218,13 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── Blank agreement for printing and signing on paper ───────────────────────
+  // Contains no booking or personal data (just the terms and write-in lines),
+  // so it needs no token. Linked from the owner dashboard's More tab.
+  if (url.searchParams.get("action") === "contract-blank") {
+    return send(200, contractHtml({}, { blank: true }));
+  }
+
   if (!eventId || !token) {
     return send(400, fallbackPage("<h2>Incomplete link</h2><p>This status link is missing information.</p>"));
   }

@@ -687,7 +687,7 @@ export const CONTRACT_TERMS = [
   ],
   [
     "The whole agreement",
-    "This agreement, together with your booking confirmation, is the complete arrangement between us. Any change we agree to by text or email counts, as long as we've confirmed it back to you. Typing your name below is your electronic signature and has the same effect as signing on paper.",
+    "This agreement, together with your booking confirmation, is the complete arrangement between us. Any change we agree to by text or email counts, as long as we've confirmed it back to you. Your signature below, whether typed online or written on paper, means you agree to these terms.",
   ],
 ];
 
@@ -719,35 +719,58 @@ export function fmtSignedAt(iso) {
  * `token` (the same client HMAC that gated the page) to render the sign form.
  * `error` is a short message shown above the form after a failed submit.
  */
-export function contractHtml(b, { eventId, token, error = "" } = {}) {
+export function contractHtml(b, { eventId, token, error = "", blank = false } = {}) {
   const status = (b.status || "PENDING").toUpperCase();
-  const cancelled = status === "CANCELLED";
-  const signed = !!b.contractSignedAt;
-  const s = cancelled ? CONTRACT_STATUS.CANCELLED : signed ? CONTRACT_STATUS.SIGNED : CONTRACT_STATUS.UNSIGNED;
+  const cancelled = !blank && status === "CANCELLED";
+  const signed = !blank && !!b.contractSignedAt;
+  const s = blank
+    ? { label: "Blank form", color: MUTED }
+    : cancelled
+    ? CONTRACT_STATUS.CANCELLED
+    : signed
+    ? CONTRACT_STATUS.SIGNED
+    : CONTRACT_STATUS.UNSIGNED;
   const eid = (b.eventId || "").replace(/[^a-zA-Z0-9]/g, "");
-  const docNo = (eid.slice(-8) || "000000").toUpperCase();
-  const canSign = !cancelled && !signed && eventId && token;
+  const docNo = blank ? "________" : (eid.slice(-8) || "000000").toUpperCase();
+  const canSign = !blank && !cancelled && !signed && eventId && token;
 
-  const clientBlock = b.organization
+  // Blank mode: the same document with write-in lines instead of booking data,
+  // for signing on paper (at the event, or for a school that wants a hard copy).
+  const line = (w = "100%") => `<span class="wl" style="width:${w}"></span>`;
+  const clientBlock = blank
+    ? `Name ${line("70%")}<br>Organization ${line("58%")}`
+    : b.organization
     ? `<strong>${esc(b.organization)}</strong><br>Attn: ${esc(b.client || "")}`
     : `<strong>${esc(b.client || "")}</strong>`;
-  const contactLines = [b.email, b.phone].filter(Boolean).map(esc).join("<br>");
+  const contactLines = blank
+    ? `Phone ${line("72%")}<br>Email ${line("74%")}`
+    : [b.email, b.phone].filter(Boolean).map(esc).join("<br>");
 
-  const rows = [
-    ["Event", [b.eventType, b.occasion].filter(Boolean).join(" — ")],
-    ["Date", fmtDate(b.date)],
-    ["Time", fmtTimeRange(b.time)],
-    ["Location", b.location || "To be confirmed — send it from your booking page"],
-    ["Guests", b.guests],
-    ["Total", b.quote],
-  ].filter(([, v]) => v);
+  const rows = blank
+    ? [["Event", ""], ["Date", ""], ["Time", ""], ["Location", ""], ["Guests", ""], ["Total", ""]]
+    : [
+        ["Event", [b.eventType, b.occasion].filter(Boolean).join(" — ")],
+        ["Date", fmtDate(b.date)],
+        ["Time", fmtTimeRange(b.time)],
+        ["Location", b.location || "To be confirmed — send it from your booking page"],
+        ["Guests", b.guests],
+        ["Total", b.quote],
+      ].filter(([, v]) => v);
 
   const termsHtml = CONTRACT_TERMS.map(
     ([h, p], i) => `<div class="term"><h4>${i + 1}. ${esc(h)}</h4><p>${esc(p)}</p></div>`
   ).join("");
 
   let signatureBlock;
-  if (cancelled) {
+  if (blank) {
+    signatureBlock = `
+      <div class="paper-sig">
+        <div class="ps-row"><div class="ps-cell wide"><div class="ps-line"></div><div class="ps-cap">Client signature</div></div><div class="ps-cell"><div class="ps-line"></div><div class="ps-cap">Date</div></div></div>
+        <div class="ps-row"><div class="ps-cell wide"><div class="ps-line"></div><div class="ps-cap">Client name (printed)</div></div></div>
+        <div class="ps-row"><div class="ps-cell wide"><div class="ps-line"></div><div class="ps-cap">For Face Painting California</div></div><div class="ps-cell"><div class="ps-line"></div><div class="ps-cap">Date</div></div></div>
+        <div class="sig-note">Terms version ${esc(CONTRACT_VERSION)}. Both sides keep a copy.</div>
+      </div>`;
+  } else if (cancelled) {
     signatureBlock = `<div class="sig-note">This booking was cancelled, so there is nothing to sign.</div>`;
   } else if (signed) {
     signatureBlock = `
@@ -783,6 +806,7 @@ export function contractHtml(b, { eventId, token, error = "" } = {}) {
   table.facts td{padding:9px 0;border-bottom:1px solid ${LINE};font-size:14.5px;color:${INK};vertical-align:top}
   table.facts td.k{width:110px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:${MUTED};font-weight:700;padding-top:12px}
   table.facts td.total{font-weight:800;color:${CORAL_RED}}
+  table.facts.blank td{padding:17px 0}
   .terms h3{font-family:Georgia,'Times New Roman',serif;font-size:18px;margin:0 0 14px;color:${INK}}
   .term{margin-bottom:16px}
   .term h4{font-size:13.5px;margin:0 0 4px;color:${INK}}
@@ -799,6 +823,12 @@ export function contractHtml(b, { eventId, token, error = "" } = {}) {
   .sig-k{flex:0 0 90px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:${MUTED};font-weight:700;padding-top:3px}
   .sig-name{font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:22px;color:${INK}}
   .sig-note{font-size:12.5px;color:${MUTED};margin-top:14px;line-height:1.7}
+  .wl{display:inline-block;border-bottom:1px solid ${INK};height:16px;vertical-align:baseline;margin-left:4px}
+  .paper-sig .ps-row{display:flex;gap:28px;margin-top:34px}
+  .paper-sig .ps-cell{flex:1}
+  .paper-sig .ps-cell.wide{flex:2.4}
+  .paper-sig .ps-line{border-bottom:1px solid ${INK};height:26px}
+  .paper-sig .ps-cap{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:${MUTED};font-weight:700;margin-top:6px}
   @media print{ .sign button{display:none} .sig-note{color:${BODY}} }
 </style></head>
 <body>
@@ -829,8 +859,8 @@ export function contractHtml(b, { eventId, token, error = "" } = {}) {
       </div>
     </div>
 
-    <table class="facts">
-      ${rows.map(([k, v]) => `<tr><td class="k">${esc(k)}</td><td${k === "Total" ? ' class="total"' : ""}>${esc(v)}</td></tr>`).join("")}
+    <table class="facts${blank ? " blank" : ""}">
+      ${rows.map(([k, v]) => `<tr><td class="k">${esc(k)}</td><td${k === "Total" && !blank ? ' class="total"' : ""}>${blank ? "&nbsp;" : esc(v)}</td></tr>`).join("")}
     </table>
 
     <div class="terms">
@@ -839,7 +869,7 @@ export function contractHtml(b, { eventId, token, error = "" } = {}) {
     </div>
 
     <div class="signature">
-      <h3>${signed ? "Signature" : "Sign here"}</h3>
+      <h3>${signed ? "Signature" : blank ? "Signatures" : "Sign here"}</h3>
       ${signatureBlock}
     </div>
   </div>
