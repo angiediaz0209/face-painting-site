@@ -1,5 +1,5 @@
-import { getBooking, updateBookingLocation } from "./_lib/book.js";
-import { clientStatusHtml, receiptHtml, sendEmail } from "./_lib/email.js";
+import { getBooking, updateBookingLocation, signContract } from "./_lib/book.js";
+import { clientStatusHtml, receiptHtml, contractHtml, contractSignedCopyHtml, fmtSignedAt, sendEmail } from "./_lib/email.js";
 import { setClientFlag } from "./_lib/clients.js";
 import { clientToken, optoutToken, verifyToken } from "./_lib/tokens.js";
 import { syncBookingsToSheet } from "./_lib/sheets.js";
@@ -143,6 +143,81 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── Client signs the booking agreement ──────────────────────────────────────
+  // The GET for action=contract is handled further down with the status page
+  // (same token check). This is the POST from the sign form on that page:
+  // typed name + "I agree" checkbox -> stored on the calendar event.
+  if (url.searchParams.get("action") === "contract" && req.method === "POST") {
+    const body = await readBody(req);
+    const id = (body.eventId || "").trim();
+    const tok = (body.token || "").trim();
+    const name = (body.name || "").trim().replace(/\s+/g, " ").slice(0, 120);
+    const agreed = body.agree === "yes" || body.agree === "on";
+    const version = (body.version || "").trim().slice(0, 20);
+
+    if (!id || !verifyToken(tok, clientToken(id))) {
+      return send(403, fallbackPage("<h2>Invalid link</h2><p>This link isn't valid.</p>"));
+    }
+
+    // Re-render the agreement with an inline error rather than a dead-end page,
+    // so a missed checkbox is a one-tap fix.
+    const reshow = async (error) => {
+      let booking;
+      try {
+        booking = await getBooking(id);
+      } catch (e) {
+        if (!(e?.code === 404 || e?.response?.status === 404)) {
+          console.error("Contract reshow error:", e);
+          return send(500, fallbackPage("<h2>Something went wrong</h2><p>We couldn't load your agreement. Please try again, or text us at (415) 991-9374.</p>"));
+        }
+      }
+      return send(400, contractHtml(booking || { status: "CANCELLED" }, { eventId: id, token: tok, error }));
+    };
+    if (name.length < 2) return reshow("Please type your full name to sign.");
+    if (!agreed) return reshow("Please tick the box to confirm you've read and agree to the terms.");
+
+    try {
+      const { booking, alreadySigned } = await signContract(id, { name, version });
+      if (!booking || booking.status === "CANCELLED") {
+        return send(200, contractHtml(booking || { status: "CANCELLED" }, { eventId: id, token: tok }));
+      }
+
+      if (!alreadySigned) {
+        const contractUrl = `${process.env.APP_BASE_URL || "https://face-painting-site.vercel.app"}/api/status?action=contract&eventId=${encodeURIComponent(id)}&token=${encodeURIComponent(tok)}`;
+        // A copy for the client, a heads-up for the team. Neither is worth
+        // failing the signature over.
+        await Promise.allSettled([
+          booking.email
+            ? sendEmail({
+                to: booking.email,
+                subject: "Your signed booking agreement ✍️",
+                html: contractSignedCopyHtml(booking, { contractUrl }),
+              }).catch((e) => console.error("Signed-copy email failed:", e))
+            : Promise.resolve(),
+          process.env.ADMIN_NOTIFICATION_EMAIL
+            ? sendEmail({
+                to: process.env.ADMIN_NOTIFICATION_EMAIL,
+                subject: `✍️ Agreement signed: ${booking.client || "a client"}, ${booking.date || ""}`,
+                html: `<p><b>${(booking.contractSignedName || name).replace(/[<>&]/g, "")}</b> signed the booking agreement for their ${booking.date || ""} event on ${fmtSignedAt(booking.contractSignedAt)}.</p>
+                       <p><a href="${contractUrl}">View the signed agreement</a></p>`,
+              }).catch((e) => console.error("Signature notification failed:", e))
+            : Promise.resolve(),
+        ]);
+      }
+
+      return send(200, contractHtml(booking, { eventId: id, token: tok }));
+    } catch (error) {
+      if (error?.code === 404 || error?.response?.status === 404) {
+        return send(200, contractHtml({ status: "CANCELLED" }, { eventId: id, token: tok }));
+      }
+      console.error("Contract sign error:", error);
+      return send(
+        500,
+        fallbackPage("<h2>Something went wrong</h2><p>We couldn't record your signature. Please try again, or text us at (415) 991-9374.</p>")
+      );
+    }
+  }
+
   if (!eventId || !token) {
     return send(400, fallbackPage("<h2>Incomplete link</h2><p>This status link is missing information.</p>"));
   }
@@ -151,23 +226,30 @@ export default async function handler(req, res) {
     return send(403, fallbackPage("<h2>Invalid link</h2><p>This status link isn't valid.</p>"));
   }
 
-  // Printable receipt, for schools and companies that need one on file.
-  // Reuses the same eventId/token check above — a client token that can view
-  // the status page can also print its receipt, nothing more.
-  const wantsReceipt = url.searchParams.get("action") === "receipt";
+  // Printable receipt (schools and companies that need one on file) and the
+  // booking agreement (view / sign / print) reuse the same eventId/token check
+  // above — a client token that can view the status page can also see these
+  // two documents for the same booking, nothing more.
+  const action = url.searchParams.get("action");
+  const render = (booking) =>
+    action === "receipt"
+      ? receiptHtml(booking)
+      : action === "contract"
+      ? contractHtml(booking, { eventId, token })
+      : clientStatusHtml(booking, { eventId, token });
 
   try {
     const booking = await getBooking(eventId);
     if (!booking) {
       // Event was deleted/declined — treat as cancelled so the client still gets
       // a clear answer instead of an error.
-      return send(200, wantsReceipt ? receiptHtml({ status: "CANCELLED" }) : clientStatusHtml({ status: "CANCELLED" }));
+      return send(200, render({ status: "CANCELLED" }));
     }
-    return send(200, wantsReceipt ? receiptHtml(booking) : clientStatusHtml(booking, { eventId, token }));
+    return send(200, render(booking));
   } catch (error) {
     // events.get 404s once a pending booking is declined (deleted).
     if (error?.code === 404 || error?.response?.status === 404) {
-      return send(200, wantsReceipt ? receiptHtml({ status: "CANCELLED" }) : clientStatusHtml({ status: "CANCELLED" }));
+      return send(200, render({ status: "CANCELLED" }));
     }
     console.error("Status error:", error);
     return send(

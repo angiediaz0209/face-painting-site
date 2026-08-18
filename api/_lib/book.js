@@ -203,6 +203,12 @@ function parseEventToBooking(e) {
     // by name rather than just the contact's personal name.
     organization: descField(description, 'Company'),
     occasion: descField(description, 'Occasion'),
+    // Client's e-signature on the booking agreement, written by signContract().
+    // Lives in private extended properties (like the reschedule request) so it
+    // survives description edits and the sheet sync.
+    contractSignedName: priv.contractSignedName || '',
+    contractSignedAt: priv.contractSignedAt || '',
+    contractVersion: priv.contractVersion || '',
     htmlLink: e.htmlLink || '',
   };
 }
@@ -453,6 +459,8 @@ export async function confirmBooking(eventId) {
     quote: parsed.quote || '',
     eventType: parsed.eventType || '',
     guests: parsed.guests || '',
+    // So the confirmation email doesn't nag someone who already signed.
+    contractSigned: !!parsed.contractSignedAt,
   };
 }
 
@@ -595,6 +603,8 @@ export async function applyReschedule(eventId) {
     quote: parsed.quote || '',
     eventType: parsed.eventType || '',
     guests: parsed.guests || '',
+    // So the confirmation email doesn't nag someone who already signed.
+    contractSigned: !!parsed.contractSignedAt,
   };
 }
 
@@ -825,6 +835,41 @@ export async function updateBookingLocation(eventId, location) {
   });
 
   return parseEventToBooking({ ...event, location, description: updated });
+}
+
+/**
+ * Records the client's e-signature on the booking agreement. Typed name +
+ * timestamp + the version of the terms they saw, stored on the event so the
+ * owner dashboard, status page and printable contract all read the same fact.
+ * Idempotent: a second signature does not overwrite the first — the first
+ * signature is the one that counts.
+ */
+export async function signContract(eventId, { name, version }) {
+  const auth = getAuthClient();
+  const calendarId = process.env.GOOGLE_CALENDAR_ID;
+  const calendar = google.calendar({ version: 'v3', auth });
+
+  const { data: event } = await calendar.events.get({ calendarId, eventId });
+  const priv = event.extendedProperties?.private || {};
+  if (priv.contractSignedAt) return { booking: parseEventToBooking(event), alreadySigned: true };
+
+  const { data: updated } = await calendar.events.patch({
+    calendarId,
+    eventId,
+    sendUpdates: 'none',
+    resource: {
+      extendedProperties: {
+        private: {
+          ...priv,
+          contractSignedName: String(name || '').slice(0, 120),
+          contractSignedAt: new Date().toISOString(),
+          contractVersion: String(version || ''),
+        },
+      },
+    },
+  });
+
+  return { booking: parseEventToBooking(updated), alreadySigned: false };
 }
 
 export async function createBooking(bookingData) {

@@ -142,6 +142,22 @@ function ctaButton(href, label, { bg = CORAL, color = "#fff" } = {}) {
   return `<a href="${href}" style="display:inline-block;background:${bg};color:${color};padding:14px 30px;border-radius:26px;text-decoration:none;font-weight:700;font-size:15px;">${label}</a>`;
 }
 
+// "Please sign your agreement" callout used by the client emails. Only rendered
+// when the caller passes a contractUrl (i.e. the booking isn't signed yet).
+function agreementCallout(contractUrl, { pending = false } = {}) {
+  if (!contractUrl) return "";
+  return `
+  <tr><td style="padding:18px 30px 4px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fdf3ec;border-left:4px solid ${CORAL_RED};border-radius:12px;">
+      <tr><td style="padding:18px 20px;">
+        <div style="font-size:14px;font-weight:800;color:${INK};">📝 One quick thing: your booking agreement</div>
+        <p style="font-size:14px;color:${BODY};line-height:1.6;margin:8px 0 14px;">It's already filled in with your details, it's short and in plain English. Just read it, type your name and tap sign. Takes about a minute.${pending ? " You can do it now or once we've confirmed your date." : ""}</p>
+        ${ctaButton(contractUrl, "Review &amp; sign")}
+      </td></tr>
+    </table>
+  </td></tr>`;
+}
+
 // ── 1. Owner: pending booking needs confirmation (image 7) ───────────────────
 export function pendingNotificationHtml(b, { approveUrl, declineUrl, calendarUrl }) {
   // Context the artist preps with. Each gets its own row rather than being
@@ -243,6 +259,7 @@ export function clientConfirmationHtml(b) {
   <tr><td style="padding:20px 30px 4px;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${CREAM};border-radius:14px;overflow:hidden;">${rows.join("")}</table>
   </td></tr>
+  ${agreementCallout(b.contractUrl)}
   <tr><td style="padding:24px 30px 6px;text-align:center;">${ctaButton(addToCalendarUrl(b), "Add to Calendar")}</td></tr>
   <tr><td style="padding:16px 30px 8px;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f8f8;border-radius:14px;">
@@ -312,6 +329,7 @@ export function clientRequestReceivedHtml(b) {
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${CREAM};border-radius:14px;overflow:hidden;">${priceRows.join("")}</table>
     <div style="font-size:13px;color:${MUTED};padding:10px 4px 0;">No payment is needed now. The balance is due on the day of your event.</div>
   </td></tr>
+  ${agreementCallout(b.contractUrl, { pending: !!b.pending })}
   <tr><td style="padding:20px 30px 6px;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f8f8;border-radius:14px;">
       <tr><td style="padding:18px 20px;">
@@ -461,6 +479,26 @@ export function clientStatusHtml(b, { eventId, token } = {}) {
   </td></tr>`
     : "";
 
+  // Booking agreement: loud until it's signed, a quiet link once it is.
+  const contractUrl = eventId && token ? `${BASE_URL}/api/status?action=contract&eventId=${encodeURIComponent(eventId)}&token=${encodeURIComponent(token)}` : "";
+  const contractBlock = !contractUrl || !active
+    ? ""
+    : b.contractSignedAt
+    ? `
+  <tr><td style="padding:14px 30px 6px;text-align:center;">
+    <a href="${contractUrl}" style="font-size:13px;color:${MUTED};text-decoration:underline;">✍️ Agreement signed by ${esc(b.contractSignedName || b.client || "you")} · view or print</a>
+  </td></tr>`
+    : `
+  <tr><td style="padding:18px 30px 6px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fdf3ec;border-left:4px solid ${CORAL_RED};border-radius:12px;">
+      <tr><td style="padding:18px 20px;">
+        <div style="font-size:14px;font-weight:800;color:${INK};">📝 Please sign your booking agreement</div>
+        <p style="font-size:14px;color:${BODY};line-height:1.6;margin:8px 0 14px;">Already filled in with your details. Read it, type your name, tap sign — about a minute.</p>
+        ${ctaButton(contractUrl, "Review &amp; sign")}
+      </td></tr>
+    </table>
+  </td></tr>`;
+
   const inner = `
   ${heroBanner({ bg: s.bg, icon: s.icon, title: s.title, subtitle: s.note })}
   <tr><td style="padding:28px 30px 4px;">
@@ -471,6 +509,7 @@ export function clientStatusHtml(b, { eventId, token } = {}) {
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${CREAM};border-radius:14px;overflow:hidden;">${rows.join("")}</table>
   </td></tr>
   ${active && !requested && b.date && b.time ? `<tr><td style="padding:22px 30px 6px;text-align:center;">${ctaButton(addToCalendarUrl(b), "Add to Calendar")}</td></tr>` : ""}
+  ${contractBlock}
   ${addressBlock}
   ${rescheduleBlock}`;
   return shell({ preheader: `Your booking status: ${s.title}`, inner });
@@ -499,30 +538,10 @@ const RECEIPT_STATUS = {
   CANCELLED: { label: "Cancelled", color: MUTED, note: "This booking was cancelled. No amount is due." },
 };
 
-export function receiptHtml(b) {
-  const status = (b.status || "PENDING").toUpperCase();
-  const s = RECEIPT_STATUS[status] || RECEIPT_STATUS.PENDING;
-  const eid = (b.eventId || "").replace(/[^a-zA-Z0-9]/g, "");
-  const receiptNo = (eid.slice(-8) || "000000").toUpperCase();
-
-  const billedTo = b.organization
-    ? `<strong>${esc(b.organization)}</strong><br>Attn: ${esc(b.client || "")}`
-    : `<strong>${esc(b.client || "")}</strong>`;
-  const contactLines = [b.email, b.phone].filter(Boolean).map(esc).join("<br>");
-
-  const eventLine = [b.eventType, b.occasion].filter(Boolean).join(" — ");
-  const whenLine = [fmtDate(b.date), fmtTimeRange(b.time)].filter(Boolean).join(", ");
-
-  const description = [
-    b.eventType || "Face painting",
-    b.guests ? `${b.guests} guests` : "",
-  ]
-    .filter(Boolean)
-    .join(" — ");
-
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Receipt — Face Painting California</title>
-<style>
+// Shared stylesheet for the "formal document" pages (receipt, agreement):
+// plain paper on the site's cream background, print-friendly.
+function paperCss() {
+  return `
   @page{margin:0.6in}
   *{box-sizing:border-box}
   body{margin:0;background:${PAGE};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:${INK};padding:32px 16px}
@@ -552,7 +571,33 @@ export function receiptHtml(b) {
     .toolbar{display:none}
     .paper{box-shadow:none;border:none;margin:0;max-width:none;padding:0}
   }
-</style></head>
+`;
+}
+
+export function receiptHtml(b) {
+  const status = (b.status || "PENDING").toUpperCase();
+  const s = RECEIPT_STATUS[status] || RECEIPT_STATUS.PENDING;
+  const eid = (b.eventId || "").replace(/[^a-zA-Z0-9]/g, "");
+  const receiptNo = (eid.slice(-8) || "000000").toUpperCase();
+
+  const billedTo = b.organization
+    ? `<strong>${esc(b.organization)}</strong><br>Attn: ${esc(b.client || "")}`
+    : `<strong>${esc(b.client || "")}</strong>`;
+  const contactLines = [b.email, b.phone].filter(Boolean).map(esc).join("<br>");
+
+  const eventLine = [b.eventType, b.occasion].filter(Boolean).join(" — ");
+  const whenLine = [fmtDate(b.date), fmtTimeRange(b.time)].filter(Boolean).join(", ");
+
+  const description = [
+    b.eventType || "Face painting",
+    b.guests ? `${b.guests} guests` : "",
+  ]
+    .filter(Boolean)
+    .join(" — ");
+
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Receipt — Face Painting California</title>
+<style>${paperCss()}</style></head>
 <body>
   <div class="toolbar"><button onclick="window.print()">🖨 Print</button></div>
   <div class="paper">
@@ -590,6 +635,229 @@ export function receiptHtml(b) {
     <div class="footnote">${esc(s.note)}</div>
   </div>
 </body></html>`;
+}
+
+// ── 4c. Booking agreement (auto-filled contract with click-to-sign) ─────────
+// The same plain-paper look as the receipt. Every field is pre-filled from the
+// booking; the client's only job is to read it, type their name and tick the
+// box. The typed name + timestamp are stored on the calendar event by
+// signContract(), and this page then renders the signature block instead of
+// the form. Bump CONTRACT_VERSION whenever the wording of the terms changes,
+// so a stored signature always says which version the client agreed to.
+export const CONTRACT_VERSION = "2026-08";
+
+// Plain-English terms. Kept as data so the wording is easy to edit in one
+// place. Each entry: [heading, paragraph].
+export const CONTRACT_TERMS = [
+  [
+    "What we're providing",
+    "A professional face painting artist for the date, time and location above. Your artist arrives about 15 minutes early to set up, and setup and packing up happen outside your booked painting time. Speed depends on the designs chosen: one artist typically paints 10 to 12 children an hour with detailed designs, more with simple ones. If you're expecting a bigger crowd than you told us, let us know ahead of time so we can add hours or a second artist.",
+  ],
+  [
+    "Price and payment",
+    "The total shown above is the full price for this booking, including travel. No deposit is required. The balance is due on the day of the event, at or before the end of the booked time, by cash or a payment method we've agreed on together. If your event is a school or company booking that needs an invoice or receipt, we're happy to provide one.",
+  ],
+  [
+    "Staying longer",
+    "If the line is still going and your artist is free to stay, extra time is welcome at $100 per additional hour ($50 per half hour), payable the same day. Your artist will check with you before the booked time ends rather than assume.",
+  ],
+  [
+    "Rescheduling and cancellation",
+    "Life happens. You can move your date free of charge by texting us at least 48 hours before the event, and we'll find another date together. If you cancel with less than 48 hours' notice, or the event doesn't go ahead when your artist arrives, the full booked amount is due, since we've held that time for you and turned away other bookings. If we ever have to cancel on our side (illness or an emergency), we'll offer a replacement artist or a new date at the same price, and you owe nothing if neither works for you.",
+  ],
+  [
+    "Weather and the space",
+    "For outdoor events, please have a shaded or covered spot in mind, ideally with a table and two chairs and somewhere nearby to rinse water. Our paints are water-based, so rain or heavy wind makes painting impossible and unsafe for the artwork. If the weather makes your event unworkable, we reschedule free of charge.",
+  ],
+  [
+    "Health and safety",
+    "We use professional, FDA-compliant, hypoallergenic water-based face paints that come off with soap and water. For everyone's safety your artist will not paint anyone with open cuts, rashes, cold sores, sunburn, lice, or who appears unwell, and may decline to paint any child who doesn't want to be painted. If anyone has a known skin sensitivity or allergy, please tell the artist before they sit down. A quick patch test on the hand is always available on request.",
+  ],
+  [
+    "Supervision",
+    "Parents and guardians remain responsible for their children at all times. Your artist paints; they can't supervise the line or the party. If the space becomes unsafe or a child is very upset, your artist may pause until things settle.",
+  ],
+  [
+    "Photos",
+    "We love showing off finished designs. Unless you tell us otherwise before the event, we may photograph completed artwork for our portfolio and social media. We never share names or details about your event, and we're glad to skip photos altogether if you'd prefer.",
+  ],
+  [
+    "Responsibility",
+    "We take care with every face we paint and are responsible for our own conduct and materials. Because our paints are hypoallergenic and safe when used as directed, we can't be held responsible for reactions from allergies or conditions we weren't told about, or for paint on clothing (it washes out, but we can't guarantee every fabric).",
+  ],
+  [
+    "The whole agreement",
+    "This agreement, together with your booking confirmation, is the complete arrangement between us. Any change we agree to by text or email counts, as long as we've confirmed it back to you. Typing your name below is your electronic signature and has the same effect as signing on paper.",
+  ],
+];
+
+const CONTRACT_STATUS = {
+  SIGNED: { label: "Signed", color: GREEN },
+  UNSIGNED: { label: "Awaiting signature", color: CORAL_RED },
+  CANCELLED: { label: "Cancelled", color: MUTED },
+};
+
+// "2026-08-17T20:14:03.000Z" -> "August 17, 2026 at 1:14 PM PT"
+export function fmtSignedAt(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return (
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Los_Angeles",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(d) + " PT"
+  );
+}
+
+/**
+ * The booking agreement page. `b` is a normalized booking; pass `eventId` +
+ * `token` (the same client HMAC that gated the page) to render the sign form.
+ * `error` is a short message shown above the form after a failed submit.
+ */
+export function contractHtml(b, { eventId, token, error = "" } = {}) {
+  const status = (b.status || "PENDING").toUpperCase();
+  const cancelled = status === "CANCELLED";
+  const signed = !!b.contractSignedAt;
+  const s = cancelled ? CONTRACT_STATUS.CANCELLED : signed ? CONTRACT_STATUS.SIGNED : CONTRACT_STATUS.UNSIGNED;
+  const eid = (b.eventId || "").replace(/[^a-zA-Z0-9]/g, "");
+  const docNo = (eid.slice(-8) || "000000").toUpperCase();
+  const canSign = !cancelled && !signed && eventId && token;
+
+  const clientBlock = b.organization
+    ? `<strong>${esc(b.organization)}</strong><br>Attn: ${esc(b.client || "")}`
+    : `<strong>${esc(b.client || "")}</strong>`;
+  const contactLines = [b.email, b.phone].filter(Boolean).map(esc).join("<br>");
+
+  const rows = [
+    ["Event", [b.eventType, b.occasion].filter(Boolean).join(" — ")],
+    ["Date", fmtDate(b.date)],
+    ["Time", fmtTimeRange(b.time)],
+    ["Location", b.location || "To be confirmed — send it from your booking page"],
+    ["Guests", b.guests],
+    ["Total", b.quote],
+  ].filter(([, v]) => v);
+
+  const termsHtml = CONTRACT_TERMS.map(
+    ([h, p], i) => `<div class="term"><h4>${i + 1}. ${esc(h)}</h4><p>${esc(p)}</p></div>`
+  ).join("");
+
+  let signatureBlock;
+  if (cancelled) {
+    signatureBlock = `<div class="sig-note">This booking was cancelled, so there is nothing to sign.</div>`;
+  } else if (signed) {
+    signatureBlock = `
+      <div class="signed">
+        <div class="sig-row"><span class="sig-k">Signed by</span><span class="sig-v sig-name">${esc(b.contractSignedName || b.client || "")}</span></div>
+        <div class="sig-row"><span class="sig-k">On</span><span class="sig-v">${esc(fmtSignedAt(b.contractSignedAt))}</span></div>
+        <div class="sig-row"><span class="sig-k">For</span><span class="sig-v">Face Painting California</span></div>
+        <div class="sig-note">Signed electronically. Terms version ${esc(b.contractVersion || CONTRACT_VERSION)}. Keep or print this page for your records.</div>
+      </div>`;
+  } else if (canSign) {
+    signatureBlock = `
+      <form method="POST" action="${BASE_URL}/api/status?action=contract" class="sign">
+        <input type="hidden" name="eventId" value="${esc(eventId)}">
+        <input type="hidden" name="token" value="${esc(token)}">
+        <input type="hidden" name="version" value="${esc(CONTRACT_VERSION)}">
+        ${error ? `<div class="err">${esc(error)}</div>` : ""}
+        <label class="sig-label">Your full name
+          <input type="text" name="name" required maxlength="120" autocomplete="name" placeholder="${esc(b.client || "Type your full name")}" value="${esc(b.client || "")}">
+        </label>
+        <label class="agree"><input type="checkbox" name="agree" value="yes" required> I've read this agreement and I agree to it.</label>
+        <button type="submit">Sign agreement</button>
+        <div class="sig-note">Typing your name here is your electronic signature. You'll be able to print or save the signed copy right after.</div>
+      </form>`;
+  } else {
+    signatureBlock = `<div class="sig-note">Awaiting signature.</div>`;
+  }
+
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Booking Agreement — Face Painting California</title>
+<style>${paperCss()}
+  .intro{font-size:14.5px;line-height:1.7;color:${INK};margin:0 0 22px}
+  table.facts{width:100%;border-collapse:collapse;margin-bottom:28px}
+  table.facts td{padding:9px 0;border-bottom:1px solid ${LINE};font-size:14.5px;color:${INK};vertical-align:top}
+  table.facts td.k{width:110px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:${MUTED};font-weight:700;padding-top:12px}
+  table.facts td.total{font-weight:800;color:${CORAL_RED}}
+  .terms h3{font-family:Georgia,'Times New Roman',serif;font-size:18px;margin:0 0 14px;color:${INK}}
+  .term{margin-bottom:16px}
+  .term h4{font-size:13.5px;margin:0 0 4px;color:${INK}}
+  .term p{margin:0;font-size:13.5px;line-height:1.7;color:${BODY}}
+  .signature{margin-top:30px;border-top:3px solid ${CORAL};padding-top:20px}
+  .signature h3{font-family:Georgia,'Times New Roman',serif;font-size:18px;margin:0 0 14px;color:${INK}}
+  .sign label{display:block;font-size:13px;color:${BODY};margin-bottom:12px}
+  .sign input[type=text]{display:block;width:100%;margin-top:6px;padding:12px;border:1px solid ${LINE};border-radius:10px;font-size:18px;font-family:Georgia,'Times New Roman',serif;font-style:italic;color:${INK}}
+  .sign .agree{display:flex;gap:10px;align-items:flex-start;font-size:14px;color:${INK};margin:14px 0 18px;line-height:1.5}
+  .sign .agree input{margin-top:3px;width:18px;height:18px;flex-shrink:0}
+  .sign button{background:${CORAL};color:#fff;border:none;padding:14px 28px;border-radius:26px;font-weight:700;font-size:15px;cursor:pointer;font-family:inherit;width:100%}
+  .sign .err{background:#fdf3ec;border-left:4px solid ${CORAL_RED};color:${INK};padding:10px 14px;border-radius:8px;font-size:13.5px;margin-bottom:14px}
+  .signed .sig-row{display:flex;gap:16px;padding:8px 0;border-bottom:1px solid ${LINE};font-size:14.5px}
+  .sig-k{flex:0 0 90px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:${MUTED};font-weight:700;padding-top:3px}
+  .sig-name{font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:22px;color:${INK}}
+  .sig-note{font-size:12.5px;color:${MUTED};margin-top:14px;line-height:1.7}
+  @media print{ .sign button{display:none} .sig-note{color:${BODY}} }
+</style></head>
+<body>
+  <div class="toolbar"><button onclick="window.print()">🖨 Print</button></div>
+  <div class="paper">
+    <div class="letterhead">
+      <div>
+        <div class="brand-name">Face Painting California</div>
+        <div class="brand-meta">${esc(BUSINESS_PHONE)}<br>${esc(BUSINESS_EMAIL)}<br>Serving Marin County, San Francisco &amp; Santa Rosa</div>
+      </div>
+      <div class="doc-title">
+        <h1>Booking Agreement</h1>
+        <div class="doc-meta">No. ${esc(docNo)}<br>Terms v${esc(CONTRACT_VERSION)}</div>
+        <div class="status" style="background:${s.color}">${esc(s.label)}</div>
+      </div>
+    </div>
+
+    <p class="intro">This agreement is between <strong>Face Painting California</strong> ("we", "us") and the client below ("you") for the face painting booking described here. It's written in plain English on purpose: it's meant to be read, not just signed.</p>
+
+    <div class="two-col">
+      <div class="col">
+        <h3>Client</h3>
+        <p>${clientBlock}${contactLines ? `<br>${contactLines}` : ""}</p>
+      </div>
+      <div class="col">
+        <h3>Provider</h3>
+        <p><strong>Face Painting California</strong><br>${esc(BUSINESS_PHONE)}<br>${esc(BUSINESS_EMAIL)}</p>
+      </div>
+    </div>
+
+    <table class="facts">
+      ${rows.map(([k, v]) => `<tr><td class="k">${esc(k)}</td><td${k === "Total" ? ' class="total"' : ""}>${esc(v)}</td></tr>`).join("")}
+    </table>
+
+    <div class="terms">
+      <h3>Terms</h3>
+      ${termsHtml}
+    </div>
+
+    <div class="signature">
+      <h3>${signed ? "Signature" : "Sign here"}</h3>
+      ${signatureBlock}
+    </div>
+  </div>
+</body></html>`;
+}
+
+// ── 4d. Client: your signed agreement (emailed copy) ─────────────────────────
+export function contractSignedCopyHtml(b, { contractUrl }) {
+  const inner = `
+  ${heroBanner({ bg: GREEN, icon: "✍️", title: "Agreement Signed", subtitle: "A copy for your records" })}
+  <tr><td style="padding:28px 30px 4px;">
+    <div style="font-size:17px;font-weight:800;color:${INK};">Hi ${esc((b.client || "there").split(" ")[0])},</div>
+    <p style="font-size:15px;color:${BODY};line-height:1.6;margin:14px 0 0;">Thanks for signing your booking agreement for <b>${esc(fmtDate(b.date))}</b>. Signed by <b>${esc(b.contractSignedName || b.client || "")}</b> on ${esc(fmtSignedAt(b.contractSignedAt))}. You can view, save or print it anytime from the link below.</p>
+  </td></tr>
+  <tr><td style="padding:22px 30px 6px;text-align:center;">${ctaButton(contractUrl, "View signed agreement")}</td></tr>
+  <tr><td style="padding:14px 30px 8px;text-align:center;font-size:13px;color:${MUTED};">Questions? Text us at ${BUSINESS_PHONE}.</td></tr>
+  <tr><td style="height:8px;"></td></tr>`;
+  return shell({ preheader: "Your signed booking agreement", inner });
 }
 
 // ── 5. Owner: client requested a reschedule ──────────────────────────────────

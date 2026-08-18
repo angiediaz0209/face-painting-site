@@ -50,3 +50,8 @@ export function statusUrlFor(eventId, baseUrl) {
   const base = baseUrl || process.env.APP_BASE_URL || "https://face-painting-site.vercel.app";
   return `${base}/api/status?eventId=${encodeURIComponent(eventId)}&token=${clientToken(eventId)}`;
 }
+
+/** The client's private booking-agreement page (view / e-sign / print). */
+export function contractUrlFor(eventId, baseUrl) {
+  return `${statusUrlFor(eventId, baseUrl)}&action=contract`;
+}

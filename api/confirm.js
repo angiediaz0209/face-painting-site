@@ -1,7 +1,7 @@
 import { confirmBooking } from "./_lib/book.js";
 import { setBookingStatus } from "./_lib/sheets.js";
 import { sendEmail, clientConfirmationHtml } from "./_lib/email.js";
-import { ownerToken, verifyToken, statusUrlFor } from "./_lib/tokens.js";
+import { ownerToken, verifyToken, statusUrlFor, contractUrlFor } from "./_lib/tokens.js";
 
 // Approving is an OWNER action, so this link carries an owner token. The status
 // link we email the client is signed differently and can't be used here.
@@ -53,6 +53,9 @@ export default async function handler(req, res) {
               location: result.location,
               quote: result.quote,
               statusUrl: statusUrl(eventId),
+              // Nudge to sign only if they haven't already (they may have from
+              // the request-received email).
+              contractUrl: result.contractSigned ? "" : contractUrlFor(eventId),
             }),
           }).catch((e) => console.error("Client confirmation email failed:", e))
         : Promise.resolve(),

@@ -61,6 +61,7 @@ h1{font-family:'Fraunces',Georgia,serif;font-variation-settings:'opsz' 96,'SOFT'
 .card:hover,.card.hl{border-color:#D8C8BB;box-shadow:0 12px 32px -12px rgba(23,28,38,.18)}
 .card.req{border-color:#E0CBA4}
 .crow{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.cbadges{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;flex-shrink:0}
 .cname{font-family:'Fraunces',Georgia,serif;font-variation-settings:'opsz' 96,'SOFT' 40,'WONK' 1;font-size:21px;font-weight:600;letter-spacing:-.015em;color:#211A19;line-height:1.2}
 .cwhen{color:#3A2C2A;font-size:14.5px;margin-top:7px}
 .cloc{color:#948784;font-size:14px;margin-top:4px}

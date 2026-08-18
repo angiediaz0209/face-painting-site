@@ -13,7 +13,7 @@ import {
   addGalleryImage,
   removeGalleryImage,
 } from "./_lib/sheets.js";
-import { fmtTimeRange, birthdayPromoHtml, sendEmail } from "./_lib/email.js";
+import { fmtTimeRange, fmtSignedAt, birthdayPromoHtml, sendEmail } from "./_lib/email.js";
 import {
   getClients,
   upsertClient,
@@ -67,7 +67,7 @@ function shellPage(title, body, script = "") {
     <meta name="format-detection" content="telephone=no">
     <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2240%22%20fill%3D%22%23E85555%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%2246%22%20fill%3D%22%23fff%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2279%22%20r%3D%227.5%22%20fill%3D%22%23F6A6A6%22%2F%3E%3Ccircle%20cx%3D%22107%22%20cy%3D%2277%22%20r%3D%227.5%22%20fill%3D%22%23D9922B%22%2F%3E%3Ccircle%20cx%3D%22115%22%20cy%3D%22103%22%20r%3D%227.5%22%20fill%3D%22%23B93B3B%22%2F%3E%3Ccircle%20cx%3D%2280%22%20cy%3D%22113%22%20r%3D%227.5%22%20fill%3D%22%232A1B18%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%229%22%20fill%3D%22%23FBF7F3%22%2F%3E%3C%2Fsvg%3E">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2240%22%20fill%3D%22%23E85555%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%2246%22%20fill%3D%22%23fff%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2279%22%20r%3D%227.5%22%20fill%3D%22%23F6A6A6%22%2F%3E%3Ccircle%20cx%3D%22107%22%20cy%3D%2277%22%20r%3D%227.5%22%20fill%3D%22%23D9922B%22%2F%3E%3Ccircle%20cx%3D%22115%22%20cy%3D%22103%22%20r%3D%227.5%22%20fill%3D%22%23B93B3B%22%2F%3E%3Ccircle%20cx%3D%2280%22%20cy%3D%22113%22%20r%3D%227.5%22%20fill%3D%22%232A1B18%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%229%22%20fill%3D%22%23FBF7F3%22%2F%3E%3C%2Fsvg%3E">
-    <link rel="stylesheet" href="/owner-dashboard.css?v=4">
+    <link rel="stylesheet" href="/owner-dashboard.css?v=5">
     <title>${title}</title>`;
   return `<!doctype html><html><head>${head}</head><body>${body}${script}</body></html>`;
 }
@@ -168,6 +168,10 @@ function detailsInner(b) {
     ["Guests", b.guests],
     ["Quote", b.quote],
     ["Notes", b.notes],
+    [
+      "Signed",
+      b.contractSignedAt ? `${b.contractSignedName || b.client || "client"} · ${fmtSignedAt(b.contractSignedAt)}` : b.status !== "CANCELLED" ? "Not yet" : "",
+    ],
   ].filter(([, v]) => v && String(v).trim());
 
   const gcal = b.htmlLink
@@ -178,14 +182,20 @@ function detailsInner(b) {
   const receipt = b.eventId
     ? `<a class="gcal" href="/api/status?action=receipt&eventId=${encodeURIComponent(b.eventId)}&token=${clientToken(b.eventId)}" target="_blank" rel="noopener" style="margin-left:16px;">🖨 Print receipt</a>`
     : "";
+  // The client's own agreement page (same link they got by email). Unsigned:
+  // opens the sign form, so the owner can hand a phone over at the event or
+  // text the link. Signed: shows the signature block and prints.
+  const contract = b.eventId
+    ? `<a class="gcal" href="/api/status?action=contract&eventId=${encodeURIComponent(b.eventId)}&token=${clientToken(b.eventId)}" target="_blank" rel="noopener" style="margin-left:16px;">${b.contractSignedAt ? "✍️ Signed agreement" : "📝 Agreement (unsigned)"}</a>`
+    : "";
 
   if (!rows.length) {
-    return `<div class="details"><div class="dempty">No extra details on file.</div>${gcal}${receipt}</div>`;
+    return `<div class="details"><div class="dempty">No extra details on file.</div>${gcal}${receipt}${contract}</div>`;
   }
   const list = rows
     .map(([k, v, fmt]) => `<div class="drow"><span class="dk">${k}</span><span class="dv">${fmt ? fmt(v) : esc(v)}</span></div>`)
     .join("");
-  return `<div class="details">${list}${gcal}${receipt}</div>`;
+  return `<div class="details">${list}${gcal}${receipt}${contract}</div>`;
 }
 
 function editFormInner(b) {
@@ -236,10 +246,19 @@ function bookingCard(b) {
       : "";
   const loc = b.location ? `<div class="cloc">${esc(b.location)}</div>` : "";
 
+  // Agreement state at a glance, so the owner can see who still needs to sign
+  // without opening every card. Nothing shown on cancelled bookings.
+  const signedPill =
+    b.status === "CANCELLED"
+      ? ""
+      : b.contractSignedAt
+      ? `<span class="badge b-confirmed" title="Agreement signed by ${esc(b.contractSignedName || "")} on ${esc(fmtSignedAt(b.contractSignedAt))}">✍ Signed</span>`
+      : `<span class="badge b-cancelled" title="Booking agreement not signed yet">Unsigned</span>`;
+
   return `<div class="card${b.status === "RESCHEDULE REQUESTED" ? " req" : ""}" id="b-${eid}" data-date="${esc(b.date)}">
     <div class="crow">
       <div class="cname">${esc(b.client || "—")}</div>
-      ${badge(b.status)}
+      <div class="cbadges">${signedPill}${badge(b.status)}</div>
     </div>
     <div class="cwhen">${esc(shortWhen(b))}</div>
     ${loc}

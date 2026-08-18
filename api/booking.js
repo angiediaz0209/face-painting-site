@@ -19,7 +19,7 @@ import { upsertClient, lookupClient } from "./_lib/clients.js";
 import { isSecondArtistAvailable } from "./_lib/sheets.js";
 import { sendEmail, clientRequestReceivedHtml } from "./_lib/email.js";
 import { getClientIp, isRateLimited } from "./_lib/ratelimit.js";
-import { statusUrlFor } from "./_lib/tokens.js";
+import { statusUrlFor, contractUrlFor } from "./_lib/tokens.js";
 
 const MAX_FIELD_LENGTH = 500;
 const MAX_NOTES_LENGTH = 1000;
@@ -358,6 +358,7 @@ async function handleSubmit(req, res) {
         secondArtist,
         hours,
         statusUrl: statusUrlFor(bookingResult.eventId),
+        contractUrl: contractUrlFor(bookingResult.eventId),
         pending: bookingResult.pending,
       }),
     }).catch((err) => console.error("Client email error:", err)),
