@@ -731,7 +731,7 @@ export function fmtSignedAt(iso) {
  * `token` (the same client HMAC that gated the page) to render the sign form.
  * `error` is a short message shown above the form after a failed submit.
  */
-export function contractHtml(b, { eventId, token, error = "", blank = false } = {}) {
+export function contractHtml(b, { eventId, token, error = "", blank = false, autoPrint = false } = {}) {
   const status = (b.status || "PENDING").toUpperCase();
   const cancelled = !blank && status === "CANCELLED";
   const signed = !blank && !!b.contractSignedAt;
@@ -899,6 +899,7 @@ export function contractHtml(b, { eventId, token, error = "", blank = false } = 
       ${signatureBlock}
     </div>
   </div>
+  ${autoPrint ? `<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},250)})</script>` : ""}
 </body></html>`;
 }
 

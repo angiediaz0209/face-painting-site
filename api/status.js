@@ -222,7 +222,9 @@ export default async function handler(req, res) {
   // Contains no booking or personal data (just the terms and write-in lines),
   // so it needs no token. Linked from the owner dashboard's More tab.
   if (url.searchParams.get("action") === "contract-blank") {
-    return send(200, contractHtml({}, { blank: true }));
+    // &print=1 opens the print dialog as soon as the page loads (the "Print
+    // blank agreement" button on the dashboard's More tab).
+    return send(200, contractHtml({}, { blank: true, autoPrint: url.searchParams.get("print") === "1" }));
   }
 
   if (!eventId || !token) {

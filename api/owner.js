@@ -798,6 +798,24 @@ function moreLinkCard(iconName, title, sub, href, { newTab = false } = {}) {
   </a>`;
 }
 
+// One-tap paperwork: opens the unfilled agreement with the print dialog already
+// up, for signing on paper at an event or for a school that wants a hard copy.
+function blankAgreementCard() {
+  return `<div class="card">
+    <div style="display:flex;align-items:center;gap:13px;min-width:0">
+      <span style="display:flex;color:#B93B3B;flex-shrink:0">${icon("doc")}</span>
+      <div style="min-width:0">
+        <div class="cname" style="font-size:17px">Blank agreement</div>
+        <div class="crmeta">An unfilled copy of the booking agreement, ready to print and sign on paper.</div>
+      </div>
+    </div>
+    <div class="cactions" style="margin-top:14px">
+      <a class="btn btn-add" href="/api/status?action=contract-blank&print=1" target="_blank" rel="noopener">🖨 Print</a>
+      <a class="btn btn-resched" href="/api/status?action=contract-blank" target="_blank" rel="noopener">Preview</a>
+    </div>
+  </div>`;
+}
+
 // Outcomes of a change-password attempt, keyed by the `pw` query param the
 // redirect carries back. Green for done, amber for anything to fix.
 const PW_MESSAGES = {
@@ -836,7 +854,7 @@ export function morePage(pw = "") {
       ${moreLinkCard("chat", "Chats", "Conversations that ended in a booking or a lead", navHref("chats"))}
       ${moreLinkCard("star", "Reviews", "Moderate and share client reviews", navHref("reviews"))}
       ${moreLinkCard("image", "Gallery", "Manage the photos on your website", navHref("gallery"))}
-      ${moreLinkCard("doc", "Blank agreement", "Print an unfilled copy of the booking agreement to sign on paper", "/api/status?action=contract-blank", { newTab: true })}
+      ${blankAgreementCard()}
       ${changePasswordCard(pw)}
     </div>`;
   return shellPage("More · Face Painting CA", appShell("more", content), DASHBOARD_SCRIPT);
