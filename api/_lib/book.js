@@ -209,6 +209,8 @@ function parseEventToBooking(e) {
     contractSignedName: priv.contractSignedName || '',
     contractSignedAt: priv.contractSignedAt || '',
     contractVersion: priv.contractVersion || '',
+    // Drawn signature (PNG in Vercel Blob); empty for name-only signatures.
+    contractSignatureUrl: priv.contractSignatureUrl || '',
     htmlLink: e.htmlLink || '',
   };
 }
@@ -844,7 +846,7 @@ export async function updateBookingLocation(eventId, location) {
  * Idempotent: a second signature does not overwrite the first — the first
  * signature is the one that counts.
  */
-export async function signContract(eventId, { name, version }) {
+export async function signContract(eventId, { name, version, signatureUrl }) {
   const auth = getAuthClient();
   const calendarId = process.env.GOOGLE_CALENDAR_ID;
   const calendar = google.calendar({ version: 'v3', auth });
@@ -864,6 +866,7 @@ export async function signContract(eventId, { name, version }) {
           contractSignedName: String(name || '').slice(0, 120),
           contractSignedAt: new Date().toISOString(),
           contractVersion: String(version || ''),
+          contractSignatureUrl: String(signatureUrl || '').slice(0, 1000),
         },
       },
     },

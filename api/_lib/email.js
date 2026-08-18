@@ -787,7 +787,8 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
   } else if (signed) {
     signatureBlock = `
       <div class="signed">
-        <div class="sig-row"><span class="sig-k">Signed by</span><span class="sig-v sig-name">${esc(b.contractSignedName || b.client || "")}</span></div>
+        ${b.contractSignatureUrl ? `<div class="sig-row"><span class="sig-k">Signature</span><span class="sig-v"><img class="sig-img" src="${esc(b.contractSignatureUrl)}" alt="Signature of ${esc(b.contractSignedName || b.client || "client")}"></span></div>` : ""}
+        <div class="sig-row"><span class="sig-k">${b.contractSignatureUrl ? "Name" : "Signed by"}</span><span class="sig-v sig-name">${esc(b.contractSignedName || b.client || "")}</span></div>
         <div class="sig-row"><span class="sig-k">On</span><span class="sig-v">${esc(fmtSignedAt(b.contractSignedAt))}</span></div>
         <div class="sig-row"><span class="sig-k">For</span><span class="sig-v">Face Painting California</span></div>
         <div class="sig-note">Signed electronically. Terms version ${esc(b.contractVersion || CONTRACT_VERSION)}. Keep or print this page for your records.</div>
@@ -802,10 +803,47 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
         <label class="sig-label">Your full name
           <input type="text" name="name" required maxlength="120" autocomplete="name" placeholder="${esc(b.client || "Type your full name")}" value="${esc(b.client || "")}">
         </label>
+        <div class="sig-label">Draw your signature
+          <div id="sigpad-wrap" class="pad-wrap">
+            <canvas id="sigpad" class="pad" aria-label="Signature pad: draw your signature with your finger or mouse"></canvas>
+            <span class="pad-hint">Sign here with your finger or mouse</span>
+            <button type="button" id="sigclear" class="pad-clear">Clear</button>
+          </div>
+          <div id="sigerr" class="err" style="display:none">Please draw your signature in the box above.</div>
+        </div>
+        <input type="hidden" name="signature" id="sigdata" value="">
         <label class="agree"><input type="checkbox" name="agree" value="yes" required> I've read this agreement and I agree to it.</label>
         <button type="submit">Sign agreement</button>
-        <div class="sig-note">Typing your name here is your electronic signature. You'll be able to print or save the signed copy right after.</div>
-      </form>`;
+        <div class="sig-note">Your drawn signature and typed name together are your electronic signature. You'll be able to print or save the signed copy right after.</div>
+      </form>
+      <script>
+      (function(){
+        var c=document.getElementById('sigpad'); if(!c) return;
+        var ctx=c.getContext('2d'), wrap=document.getElementById('sigpad-wrap'), err=document.getElementById('sigerr');
+        var drawing=false, has=false, last=null;
+        function setup(){
+          var r=c.getBoundingClientRect(), d=window.devicePixelRatio||1;
+          var keep=has?c.toDataURL():null;
+          c.width=Math.round(r.width*d); c.height=Math.round(r.height*d);
+          ctx.setTransform(d,0,0,d,0,0);
+          ctx.lineWidth=2.2; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#2d3540';
+          if(keep){ var i=new Image(); i.onload=function(){ ctx.drawImage(i,0,0,r.width,r.height); }; i.src=keep; }
+        }
+        function pos(e){ var r=c.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; }
+        function mark(){ has=true; wrap.classList.add('has'); err.style.display='none'; }
+        c.addEventListener('pointerdown',function(e){ e.preventDefault(); drawing=true; last=pos(e); try{c.setPointerCapture(e.pointerId);}catch(_){} ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(last.x+0.01,last.y+0.01); ctx.stroke(); mark(); });
+        c.addEventListener('pointermove',function(e){ if(!drawing) return; e.preventDefault(); var p=pos(e); ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p; });
+        function stop(){ drawing=false; }
+        c.addEventListener('pointerup',stop); c.addEventListener('pointercancel',stop); c.addEventListener('pointerleave',stop);
+        document.getElementById('sigclear').addEventListener('click',function(){ ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,c.width,c.height); ctx.restore(); has=false; wrap.classList.remove('has'); });
+        var t; window.addEventListener('resize',function(){ clearTimeout(t); t=setTimeout(setup,150); });
+        setup();
+        document.querySelector('form.sign').addEventListener('submit',function(e){
+          if(!has){ e.preventDefault(); err.style.display='block'; c.scrollIntoView({block:'center',behavior:'smooth'}); return; }
+          document.getElementById('sigdata').value=c.toDataURL('image/png');
+        });
+      })();
+      </script>`;
   } else {
     signatureBlock = `<div class="sig-note">Awaiting signature.</div>`;
   }
@@ -829,8 +867,15 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
   .sign input[type=text]{display:block;width:100%;margin-top:6px;padding:12px;border:1px solid ${LINE};border-radius:10px;font-size:18px;font-family:Georgia,'Times New Roman',serif;font-style:italic;color:${INK}}
   .sign .agree{display:flex;gap:10px;align-items:flex-start;font-size:14px;color:${INK};margin:14px 0 18px;line-height:1.5}
   .sign .agree input{margin-top:3px;width:18px;height:18px;flex-shrink:0}
-  .sign button{background:${CORAL};color:#fff;border:none;padding:14px 28px;border-radius:26px;font-weight:700;font-size:15px;cursor:pointer;font-family:inherit;width:100%}
+  .sign button[type=submit]{background:${CORAL};color:#fff;border:none;padding:14px 28px;border-radius:26px;font-weight:700;font-size:15px;cursor:pointer;font-family:inherit;width:100%}
   .sign .err{background:#fdf3ec;border-left:4px solid ${CORAL_RED};color:${INK};padding:10px 14px;border-radius:8px;font-size:13.5px;margin-bottom:14px}
+  .pad-wrap{position:relative;margin-top:6px;background:#fff;border:1px solid ${LINE};border-radius:10px;overflow:hidden}
+  .pad{display:block;width:100%;height:170px;touch-action:none;cursor:crosshair}
+  .pad-hint{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:15px;color:${MUTED};pointer-events:none}
+  .pad-wrap.has .pad-hint{display:none}
+  .pad-wrap:before{content:"";position:absolute;left:24px;right:24px;bottom:34px;border-bottom:1px dashed ${LINE};pointer-events:none}
+  .pad-clear{position:absolute;right:10px;bottom:8px;background:${PAGE};color:${BODY};border:1px solid ${LINE};border-radius:14px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+  .sig-img{display:block;max-width:320px;width:100%;height:auto;margin:2px 0 6px}
   .signed .sig-row{display:flex;gap:16px;padding:8px 0;border-bottom:1px solid ${LINE};font-size:14.5px}
   .sig-k{flex:0 0 90px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:${MUTED};font-weight:700;padding-top:3px}
   .sig-name{font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:22px;color:${INK}}
@@ -847,7 +892,8 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
     table.facts td{font-size:14px}
     .term p{font-size:14px}
     .sign input[type=text]{font-size:17px}
-    .sign button{padding:15px 20px;font-size:16px}
+    .sign button[type=submit]{padding:15px 20px;font-size:16px}
+    .pad{height:150px}
     .signed .sig-row{gap:12px}
     .sig-k{flex:0 0 74px}
     .sig-name{font-size:20px}
@@ -855,7 +901,7 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
     .paper-sig .ps-cell.wide{flex:1.8}
     .wl{min-width:90px}
   }
-  @media print{ .sign button{display:none} .sig-note{color:${BODY}} }
+  @media print{ .sign button{display:none} .sig-note{color:${BODY}} .sig-img{max-width:280px} }
 </style></head>
 <body>
   <div class="toolbar"><button onclick="window.print()">🖨 Print</button></div>

@@ -176,8 +176,37 @@ export default async function handler(req, res) {
     if (name.length < 2) return reshow("Please type your full name to sign.");
     if (!agreed) return reshow("Please tick the box to confirm you've read and agree to the terms.");
 
+    // Drawn signature: a PNG data URL from the canvas on the agreement page.
+    // Stored in Vercel Blob (an unguessable public URL, like gallery photos)
+    // because a calendar extended property can't hold an image. If storage is
+    // unavailable we still record the typed-name signature rather than lose
+    // the client's consent — the drawing is a bonus, not the record.
+    let signatureUrl = "";
+    const dataUrl = String(body.signature || "");
+    const m = /^data:image\/png;base64,([A-Za-z0-9+/=\s]+)$/.exec(dataUrl);
+    if (m && dataUrl.length < 400_000) {
+      if (process.env.BLOB_READ_WRITE_TOKEN) {
+        try {
+          const png = Buffer.from(m[1].replace(/\s/g, ""), "base64");
+          if (png.length > 24 && png.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+            const { put } = await import("@vercel/blob");
+            const blob = await put(`signatures/${id.replace(/[^\w-]/g, "")}.png`, png, {
+              access: "public",
+              contentType: "image/png",
+              addRandomSuffix: true,
+            });
+            signatureUrl = blob.url;
+          }
+        } catch (e) {
+          console.error("Signature image upload failed:", e);
+        }
+      } else {
+        console.warn("Signature image not stored: BLOB_READ_WRITE_TOKEN is not set.");
+      }
+    }
+
     try {
-      const { booking, alreadySigned } = await signContract(id, { name, version });
+      const { booking, alreadySigned } = await signContract(id, { name, version, signatureUrl });
       if (!booking || booking.status === "CANCELLED") {
         return send(200, contractHtml(booking || { status: "CANCELLED" }, { eventId: id, token: tok }));
       }
