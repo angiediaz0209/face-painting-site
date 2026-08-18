@@ -566,6 +566,18 @@ function paperCss() {
   .total-row td{border-bottom:none;padding-top:16px;font-weight:800;font-size:17px}
   .total-row .amt{color:${CORAL_RED}}
   .footnote{font-size:12.5px;color:${MUTED};margin-top:22px;line-height:1.7;border-top:1px solid ${LINE};padding-top:16px}
+  @media (max-width:560px){
+    body{padding:14px 10px}
+    .toolbar{margin-bottom:10px}
+    .paper{padding:26px 18px;border-radius:8px}
+    .letterhead{flex-direction:column;gap:14px;padding-bottom:16px;margin-bottom:20px}
+    .doc-title{text-align:left}
+    .doc-title h1{font-size:22px}
+    .brand-name{font-size:19px}
+    .two-col{gap:20px;margin-bottom:22px}
+    .col p{font-size:14px}
+    table.items td{font-size:14px;padding:12px 0}
+  }
   @media print{
     body{background:#fff;padding:0}
     .toolbar{display:none}
@@ -829,6 +841,20 @@ export function contractHtml(b, { eventId, token, error = "", blank = false } = 
   .paper-sig .ps-cell.wide{flex:2.4}
   .paper-sig .ps-line{border-bottom:1px solid ${INK};height:26px}
   .paper-sig .ps-cap{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:${MUTED};font-weight:700;margin-top:6px}
+  @media (max-width:560px){
+    .intro{font-size:14px;margin-bottom:18px}
+    table.facts td.k{width:82px;font-size:10.5px}
+    table.facts td{font-size:14px}
+    .term p{font-size:14px}
+    .sign input[type=text]{font-size:17px}
+    .sign button{padding:15px 20px;font-size:16px}
+    .signed .sig-row{gap:12px}
+    .sig-k{flex:0 0 74px}
+    .sig-name{font-size:20px}
+    .paper-sig .ps-row{gap:16px;margin-top:30px}
+    .paper-sig .ps-cell.wide{flex:1.8}
+    .wl{min-width:90px}
+  }
   @media print{ .sign button{display:none} .sig-note{color:${BODY}} }
 </style></head>
 <body>
