@@ -10,6 +10,7 @@ import {
   isEmail,
   isPhone,
 } from '../lib/booking';
+import { track } from '../lib/analytics.js';
 
 // Structured widgets Sky can drop into the conversation.
 //
@@ -235,6 +236,15 @@ export function DetailsForm({ booking, transcript, onSubmitted, disabled }) {
       if (!res.ok) {
         setError(data.error || 'Something went wrong. Please text us at 415-991-9374.');
         return;
+      }
+      if (!data.duplicate) {
+        const q = computeQuote(booking);
+        track('booking_submitted', {
+          city: booking.city || '',
+          hours: booking.hours,
+          currency: 'USD',
+          value: q?.total || undefined,
+        });
       }
       onSubmitted({ duplicate: Boolean(data.duplicate), pending: data.pending !== false, name: values.name, booking });
     } catch {

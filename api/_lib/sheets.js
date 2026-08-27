@@ -564,6 +564,49 @@ export async function addReview({ name, rating, eventType, text, key }) {
   return id;
 }
 
+// ── Quotes tab ────────────────────────────────────────────────────────────────
+// One row per price card Sky shows a visitor. Together with the booking rows
+// (Sheet1, "Booked On") this gives the quote→booking conversion rate, average
+// quote, and which cities/hours people ask about but don't book.
+const QUOTE_HEADERS = ["Shown On", "City", "Hours", "Second Artist", "Quote"];
+const QUOTE_RANGE = "Quotes!A:E";
+
+async function ensureQuotesSheet(sheets, sheetId) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId });
+  const exists = (meta.data.sheets || []).some((s) => s.properties?.title === "Quotes");
+  if (!exists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: sheetId,
+      requestBody: { requests: [{ addSheet: { properties: { title: "Quotes" } } }] },
+    });
+  }
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: "Quotes!A1:E1" });
+  const current = res.data.values?.[0] || [];
+  if (current.join("|") !== QUOTE_HEADERS.join("|")) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: sheetId,
+      range: "Quotes!A1:E1",
+      valueInputOption: "RAW",
+      requestBody: { values: [QUOTE_HEADERS] },
+    });
+  }
+}
+
+export async function addQuoteToSheet({ city, hours, secondArtist, total }) {
+  const client = getSheetsClient();
+  if (!client) return;
+  const { sheets, sheetId } = client;
+  await ensureQuotesSheet(sheets, sheetId);
+  const row = [nowStamp(), city || "", String(hours || ""), secondArtist ? "yes" : "no", String(total || "")];
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: sheetId,
+    range: QUOTE_RANGE,
+    valueInputOption: "RAW",
+    insertDataOption: "INSERT_ROWS",
+    requestBody: { values: [row] },
+  });
+}
+
 // ── Settings tab ──────────────────────────────────────────────────────────────
 // Owner-controlled switches that change how Sky behaves, without a redeploy.
 // Simple key/value rows.

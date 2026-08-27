@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import getSkySystemPrompt from "./_lib/sky-system-prompt.js";
 import { createBooking, checkAvailability } from "./_lib/book.js";
 import { sendBookingNotification } from "./_lib/notify.js";
-import { addBookingToSheet, addConversation, isSecondArtistAvailable } from "./_lib/sheets.js";
+import { addBookingToSheet, addConversation, addQuoteToSheet, isSecondArtistAvailable } from "./_lib/sheets.js";
 import { computeQuote } from "./_lib/pricing.js";
 import { lookupClient, upsertClient } from "./_lib/clients.js";
 
@@ -364,14 +364,25 @@ const WIDGET_TOOLS = {
     type: "time_picker",
     hours: Number(input.hours) > 0 ? Number(input.hours) : 2,
   }),
-  show_quote: (input) => ({
-    type: "quote",
-    city: input.city,
-    hours: Number(input.hours) || 2,
-    secondArtist: input.secondArtist === true,
-    lastQuote: Number(input.lastQuote) || undefined,
-    lastHours: Number(input.lastHours) || undefined,
-  }),
+  show_quote: (input) => {
+    const ui = {
+      type: "quote",
+      city: input.city,
+      hours: Number(input.hours) || 2,
+      secondArtist: input.secondArtist === true,
+      lastQuote: Number(input.lastQuote) || undefined,
+      lastHours: Number(input.lastHours) || undefined,
+    };
+    // The card does its own math in the browser; this copy is for analytics
+    // (GA4 quote_shown value) and the Quotes tab in the Sheet.
+    try {
+      const q = computeQuote(ui);
+      if (q?.inServiceArea) ui.total = q.total;
+    } catch {
+      /* card still renders without it */
+    }
+    return ui;
+  },
   show_details_form: (input) => ({
     type: "details_form",
     booking: {
@@ -914,6 +925,13 @@ export default async function handler(req, res) {
     if (/^\s*[[(].*[\])]\s*$/.test(reply)) reply = "";
     if (!reply && ui?.type === "details_form") {
       reply = "Pop your details in here and I'll get this over to the team.";
+    }
+
+    // Every quote Sky presents goes to the Quotes tab, so quotes-vs-bookings
+    // conversion can be measured. Fire-and-forget: a Sheets hiccup must not
+    // delay or break the reply.
+    if (ui?.type === "quote" && ui.total) {
+      addQuoteToSheet(ui).catch((err) => console.error("Quote log error:", err));
     }
 
     return res.status(200).json({ response: reply, ui });

@@ -1,3 +1,4 @@
+import { track } from '../lib/analytics.js';
 import { useState, useRef, useEffect } from 'react';
 import { MinusIcon } from './Icons';
 import {
@@ -147,6 +148,8 @@ export default function ChatWidget({ onClose }) {
     // talking to the model, but uses them to know what Sky has already shown so
     // she can't repeat a widget the client has already answered.
     const updatedMessages = [...messages, { role: 'user', content: userMessage }];
+    // First message from the visitor: top of the booking funnel.
+    if (!messages.some((m) => m.role === 'user')) track('chat_started');
     setMessages((prev) => [...prev, { role: 'user', content: userMessage }]);
     setIsLoading(true);
 
@@ -158,6 +161,17 @@ export default function ChatWidget({ onClose }) {
         body: JSON.stringify({ message: userMessage, conversationHistory: updatedMessages, website: '' }),
       });
       const data = await res.json();
+      if (data.ui?.type === 'quote') {
+        track('quote_shown', {
+          city: data.ui.city || '',
+          hours: data.ui.hours,
+          second_artist: data.ui.secondArtist ? 'yes' : 'no',
+          currency: 'USD',
+          value: data.ui.total || undefined,
+        });
+      } else if (data.ui?.type === 'details_form') {
+        track('details_form_shown');
+      }
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', content: data.response, ui: data.ui || null },
