@@ -949,6 +949,36 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
 </body></html>`;
 }
 
+// ── 4c-ii. Client: here's your agreement (sent on request from the dashboard) ─
+// For clients who ask for the contract, or didn't spot the callout in their
+// booking email. Unsigned: asks them to review and sign. Signed: a copy.
+export function agreementRequestHtml(b, { contractUrl }) {
+  const signed = !!b.contractSignedAt;
+  const rows = [
+    detailRow("Event Date", esc(fmtDate(b.date))),
+    b.time ? detailRow("Time", esc(fmtTimeRange(b.time))) : "",
+    b.location ? detailRow("Location", esc(b.location)) : "",
+    b.quote ? detailRow("Total", esc(b.quote), { valueColor: CORAL, last: true }) : "",
+  ].filter(Boolean);
+  const inner = `
+  ${heroBanner({ bg: CORAL, icon: "📝", title: signed ? "Your Booking Agreement" : "Please Sign Your Agreement", subtitle: signed ? "A copy for your records" : "It's short, and it's already filled in" })}
+  <tr><td style="padding:28px 30px 4px;">
+    <div style="font-size:17px;font-weight:800;color:${INK};">Hi ${esc((b.client || "there").split(" ")[0])},</div>
+    <p style="font-size:15px;color:${BODY};line-height:1.6;margin:14px 0 0;">${
+      signed
+        ? `Here's the booking agreement you signed for your event on <b>${esc(fmtDate(b.date))}</b>. You can view, save or print it anytime from the link below.`
+        : `Here's the booking agreement for your event on <b>${esc(fmtDate(b.date))}</b>. It's already filled in with your details and written in plain English. Please read it, draw your signature, type your name and tap sign, it takes about a minute.`
+    }</p>
+  </td></tr>
+  <tr><td style="padding:18px 30px 4px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${CREAM};border-radius:14px;overflow:hidden;">${rows.join("")}</table>
+  </td></tr>
+  <tr><td style="padding:22px 30px 6px;text-align:center;">${ctaButton(contractUrl, signed ? "View signed agreement" : "Review &amp; sign")}</td></tr>
+  <tr><td style="padding:14px 30px 8px;text-align:center;font-size:13px;color:${MUTED};">Questions? Text us at ${BUSINESS_PHONE}.</td></tr>
+  <tr><td style="height:8px;"></td></tr>`;
+  return shell({ preheader: signed ? "Your signed booking agreement" : "Your booking agreement, ready to sign", inner });
+}
+
 // ── 4d. Client: your signed agreement (emailed copy) ─────────────────────────
 export function contractSignedCopyHtml(b, { contractUrl }) {
   const inner = `

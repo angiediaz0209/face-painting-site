@@ -1,5 +1,5 @@
 import { invalidate } from "./_lib/cache.js";
-import { listCalendarBookings, createOwnerBooking, updateBooking } from "./_lib/book.js";
+import { listCalendarBookings, createOwnerBooking, updateBooking, getBooking } from "./_lib/book.js";
 import {
   syncBookingsToSheet,
   getBookingsFromSheet,
@@ -14,7 +14,7 @@ import {
   addGalleryImage,
   removeGalleryImage,
 } from "./_lib/sheets.js";
-import { fmtTimeRange, fmtSignedAt, birthdayPromoHtml, sendEmail } from "./_lib/email.js";
+import { fmtTimeRange, fmtSignedAt, birthdayPromoHtml, agreementRequestHtml, sendEmail } from "./_lib/email.js";
 import {
   getClients,
   upsertClient,
@@ -28,7 +28,7 @@ import {
 } from "./_lib/clients.js";
 import { optoutToken } from "./status.js";
 import { reviewToken } from "./review.js";
-import { ownerToken, clientToken } from "./_lib/tokens.js";
+import { ownerToken, clientToken, contractUrlFor } from "./_lib/tokens.js";
 import { statsForMonth, statsAllTime, currentMonthPacific, shiftMonth, fmtMoney, fmtPct, EXTERNAL_REPORTS } from "./_lib/stats.js";
 import { isAuthed, passwordMatches, sessionToken, setOwnerPassword, hasCredential } from "./_lib/owner-auth.js";
 
@@ -191,13 +191,37 @@ function detailsInner(b) {
     ? `<a class="gcal" href="/api/status?action=contract&eventId=${encodeURIComponent(b.eventId)}&token=${clientToken(b.eventId)}" target="_blank" rel="noopener" style="margin-left:16px;">${b.contractSignedAt ? "✍️ Signed agreement" : "📝 Agreement (unsigned)"}</a>`
     : "";
 
+  // Send the agreement to the client on request: email (server-side, so it
+  // works from any device) or a pre-written text with the link.
+  const sendRow = b.eventId && b.status !== "CANCELLED" ? sendAgreementRow(b) : "";
+
   if (!rows.length) {
-    return `<div class="details"><div class="dempty">No extra details on file.</div>${gcal}${receipt}${contract}</div>`;
+    return `<div class="details"><div class="dempty">No extra details on file.</div>${gcal}${receipt}${contract}${sendRow}</div>`;
   }
   const list = rows
     .map(([k, v, fmt]) => `<div class="drow"><span class="dk">${k}</span><span class="dv">${fmt ? fmt(v) : esc(v)}</span></div>`)
     .join("");
-  return `<div class="details">${list}${gcal}${receipt}${contract}</div>`;
+  return `<div class="details">${list}${gcal}${receipt}${contract}${sendRow}</div>`;
+}
+
+function sendAgreementRow(b) {
+  const signed = !!b.contractSignedAt;
+  // Absolute, because it goes into a text message. contractUrlFor() reads
+  // APP_BASE_URL like every other emailed link.
+  const contractUrl = contractUrlFor(b.eventId);
+  const first = (b.client || "").split(" ")[0] || "there";
+  const smsBody = signed
+    ? `Hi ${first}, here's a copy of your signed booking agreement with Face Painting California: ${contractUrl}`
+    : `Hi ${first}, here's your booking agreement with Face Painting California. It's already filled in, just read it and sign at the bottom: ${contractUrl}`;
+  const email = b.email
+    ? `<form method="POST" action="/api/owner" style="display:inline">
+        <input type="hidden" name="action" value="send-agreement">
+        <input type="hidden" name="eventId" value="${esc(b.eventId)}">
+        <button class="btn btn-text" type="submit">✉️ ${signed ? "Email signed copy" : "Email agreement"}</button>
+      </form>`
+    : `<span class="crmeta">No email on file</span>`;
+  const text = b.phone ? `<a class="btn btn-copy" href="${esc(smsHref(b.phone, smsBody))}">💬 Text the link</a>` : "";
+  return `<div class="cactions" style="margin-top:14px">${email}${text}</div>`;
 }
 
 function editFormInner(b) {
@@ -1079,8 +1103,17 @@ const TIMING_WARNINGS = {
   tight: "Tight fit: not a lot of breathing room against another booking the same day. Worth a second look.",
 };
 
-export function dashboardPage(bookings, ym, secondArtistAvailable = false, warn = "", loadError = false) {
+const SENT_MESSAGES = {
+  agreement: ["Agreement emailed to the client.", "note-ok"],
+  noemail: ["That booking has no email on file, so nothing was sent. Use \"Text the link\" instead.", "note-warn"],
+  failed: ["Couldn't send the agreement. Please try again in a moment.", "note-warn"],
+};
+
+export function dashboardPage(bookings, ym, secondArtistAvailable = false, warn = "", loadError = false, sent = "") {
   const today = todayPacific();
+  const sentBanner = SENT_MESSAGES[sent]
+    ? `<div class="note ${SENT_MESSAGES[sent][1]}" style="margin-bottom:14px">${SENT_MESSAGES[sent][0]}</div>`
+    : "";
   const errorBanner = loadError
     ? `<div class="note note-err" style="margin-bottom:14px">Couldn't reach Google Calendar, so bookings can't be shown right now. On a local dev server this usually means Google credentials aren't set in <code>.env.local</code>; otherwise check the server logs.</div>`
     : "";
@@ -1125,6 +1158,7 @@ export function dashboardPage(bookings, ym, secondArtistAvailable = false, warn 
     </div>
     ${errorBanner}
     ${warnBanner}
+    ${sentBanner}
     ${toggle}
     ${addEventDrawer()}
     ${secondArtistToggle(secondArtistAvailable)}
@@ -1206,6 +1240,22 @@ async function handleAction(body, base) {
       invalidate("clients");
     }
     return;
+  }
+
+  // ── Send the booking agreement to the client (on request) ──────────────────
+  if (body.action === "send-agreement") {
+    const eventId = (body.eventId || "").trim();
+    if (!eventId) return { sent: "failed" };
+    const b = await getBooking(eventId).catch(() => null);
+    if (!b || b.status === "CANCELLED") return { sent: "failed" };
+    if (!b.email) return { sent: "noemail" };
+    const contractUrl = contractUrlFor(eventId, base);
+    await sendEmail({
+      to: b.email,
+      subject: b.contractSignedAt ? "Your signed booking agreement ✍️" : "Your booking agreement, ready to sign 📝",
+      html: agreementRequestHtml(b, { contractUrl }),
+    });
+    return { sent: "agreement" };
   }
 
   // ── Second artist availability (controls what Sky may offer) ───────────────
@@ -1380,6 +1430,7 @@ export default async function handler(req, res) {
         actionResult = await handleAction(body, base);
       } catch (error) {
         console.error("Owner action error:", error);
+        if (body.action === "send-agreement") actionResult = { sent: "failed" };
       }
       // Redirect so a refresh doesn't resubmit the form; return to the same
       // view AND scope, so e.g. editing a lead lands back on the Leads toggle
@@ -1387,7 +1438,8 @@ export default async function handler(req, res) {
       const viewOk = /^(followups|clients|reviews|gallery|more)$/.test(body.view || "") ? body.view : "";
       const scopeOk = /^(past|leads)$/.test(body.scope || "") ? body.scope : "";
       const warnOk = /^(tight|urgent|overlap)$/.test(actionResult?.warn || "") ? actionResult.warn : "";
-      const qs = [viewOk && `view=${viewOk}`, scopeOk && `scope=${scopeOk}`, warnOk && `warn=${warnOk}`]
+      const sentOk = /^(agreement|noemail|failed)$/.test(actionResult?.sent || "") ? actionResult.sent : "";
+      const qs = [viewOk && `view=${viewOk}`, scopeOk && `scope=${scopeOk}`, warnOk && `warn=${warnOk}`, sentOk && `sent=${sentOk}`]
         .filter(Boolean)
         .join("&");
       res.statusCode = 303;
@@ -1479,7 +1531,7 @@ export default async function handler(req, res) {
       console.error("Calendar load error:", error);
       loadError = true;
     }
-    return html(200, dashboardPage(bookings, params.get("ym"), await isSecondArtistAvailable(), params.get("warn"), loadError));
+    return html(200, dashboardPage(bookings, params.get("ym"), await isSecondArtistAvailable(), params.get("warn"), loadError, params.get("sent")));
   } catch (error) {
     console.error("Owner dashboard error:", error);
     return html(500, shellPage("Error", `<div class="login"><h1>Something went wrong</h1><p class="sub">Couldn't load the dashboard. Check the server logs.</p></div>`));
