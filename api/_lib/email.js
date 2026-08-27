@@ -1016,6 +1016,44 @@ function encodeSubject(subject) {
   return `=?UTF-8?B?${Buffer.from(subject, "utf-8").toString("base64")}?=`;
 }
 
+// ── 6. Owner: monthly stats summary (sent by the cron on the 1st) ────────────
+export function monthlyStatsHtml(m, prev, { dashboardUrl, reports = [] } = {}) {
+  const pct = (n) => (n == null ? "—" : `${Math.round(n * 100)}%`);
+  const usd = (n) => "$" + Math.round(n || 0).toLocaleString("en-US");
+  const arrow = (cur, old) => {
+    if (!old) return "";
+    const d = Math.round(((cur - old) / old) * 100);
+    return ` <span style="color:${d >= 0 ? "#3D6B48" : "#9A3838"};font-size:12px;">${d >= 0 ? "▲" : "▼"} ${Math.abs(d)}%</span>`;
+  };
+  const rows = [
+    detailRow("Quotes given", `${m.quotes}${arrow(m.quotes, prev?.quotes)}`),
+    detailRow("Bookings", `${m.bookings}${arrow(m.bookings, prev?.bookings)}`),
+    detailRow("Quote → booking", pct(m.conversion)),
+    detailRow("Booked value", `${usd(m.pipeline)}${arrow(m.pipeline, prev?.pipeline)}`),
+    detailRow("Revenue (events that month)", usd(m.revenue)),
+    detailRow("Average quote", usd(m.avgQuote), { valueColor: CORAL, last: true }),
+  ];
+  const links = reports
+    .map((r) => `<div style="margin:6px 0;"><a href="${r.href}" style="color:${CORAL_RED};font-weight:700;text-decoration:none;">${esc(r.title)} →</a><div style="font-size:12px;color:${MUTED};">${esc(r.sub)}</div></div>`)
+    .join("");
+  const inner = `
+  ${heroBanner({ bg: INK, icon: "📊", title: `${esc(m.label)} in numbers`, subtitle: "Your monthly summary from Face Painting California" })}
+  <tr><td style="padding:22px 30px 4px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${CREAM};border-radius:14px;overflow:hidden;">${rows.join("")}</table>
+  </td></tr>
+  <tr><td style="padding:18px 30px 4px;font-size:14px;color:${BODY};line-height:1.6;">
+    ${m.topCities?.length ? `<b>Most-quoted cities:</b> ${m.topCities.map(([c, n]) => `${esc(c)} (${n})`).join(" · ")}<br>` : ""}
+    ${m.topEventTypes?.length ? `<b>Booked event types:</b> ${m.topEventTypes.map(([c, n]) => `${esc(c)} (${n})`).join(" · ")}` : ""}
+  </td></tr>
+  <tr><td style="padding:18px 30px 4px;">
+    <div style="font-size:13px;font-weight:800;color:${INK};text-transform:uppercase;letter-spacing:.04em;">Traffic &amp; search</div>
+    ${links}
+  </td></tr>
+  <tr><td style="padding:22px 30px 6px;text-align:center;">${ctaButton(dashboardUrl, "Open the Stats page")}</td></tr>
+  <tr><td style="height:8px;"></td></tr>`;
+  return shell({ preheader: `${m.quotes} quotes, ${m.bookings} bookings, ${usd(m.pipeline)} booked`, inner });
+}
+
 export async function sendEmail({ to, subject, html, fromEmail }) {
   const from = fromEmail || process.env.ADMIN_NOTIFICATION_EMAIL;
   if (!from || !to) {

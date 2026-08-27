@@ -5,6 +5,7 @@ import {
   getBookingsFromSheet,
   getReviews,
   getConversations,
+  getQuotesFromSheet,
   isSecondArtistAvailable,
   setSetting,
   SECOND_ARTIST_KEY,
@@ -28,6 +29,7 @@ import {
 import { optoutToken } from "./status.js";
 import { reviewToken } from "./review.js";
 import { ownerToken, clientToken } from "./_lib/tokens.js";
+import { statsForMonth, statsAllTime, currentMonthPacific, shiftMonth, fmtMoney, fmtPct, EXTERNAL_REPORTS } from "./_lib/stats.js";
 import { isAuthed, passwordMatches, sessionToken, setOwnerPassword, hasCredential } from "./_lib/owner-auth.js";
 
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || "";
@@ -67,7 +69,7 @@ function shellPage(title, body, script = "") {
     <meta name="format-detection" content="telephone=no">
     <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2240%22%20fill%3D%22%23E85555%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%2246%22%20fill%3D%22%23fff%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2279%22%20r%3D%227.5%22%20fill%3D%22%23F6A6A6%22%2F%3E%3Ccircle%20cx%3D%22107%22%20cy%3D%2277%22%20r%3D%227.5%22%20fill%3D%22%23D9922B%22%2F%3E%3Ccircle%20cx%3D%22115%22%20cy%3D%22103%22%20r%3D%227.5%22%20fill%3D%22%23B93B3B%22%2F%3E%3Ccircle%20cx%3D%2280%22%20cy%3D%22113%22%20r%3D%227.5%22%20fill%3D%22%232A1B18%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%229%22%20fill%3D%22%23FBF7F3%22%2F%3E%3C%2Fsvg%3E">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2240%22%20fill%3D%22%23E85555%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%2246%22%20fill%3D%22%23fff%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2279%22%20r%3D%227.5%22%20fill%3D%22%23F6A6A6%22%2F%3E%3Ccircle%20cx%3D%22107%22%20cy%3D%2277%22%20r%3D%227.5%22%20fill%3D%22%23D9922B%22%2F%3E%3Ccircle%20cx%3D%22115%22%20cy%3D%22103%22%20r%3D%227.5%22%20fill%3D%22%23B93B3B%22%2F%3E%3Ccircle%20cx%3D%2280%22%20cy%3D%22113%22%20r%3D%227.5%22%20fill%3D%22%232A1B18%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%229%22%20fill%3D%22%23FBF7F3%22%2F%3E%3C%2Fsvg%3E">
-    <link rel="stylesheet" href="/owner-dashboard.css?v=5">
+    <link rel="stylesheet" href="/owner-dashboard.css?v=6">
     <title>${title}</title>`;
   return `<!doctype html><html><head>${head}</head><body>${body}${script}</body></html>`;
 }
@@ -402,6 +404,7 @@ function icon(name) {
   const p = {
     cal: `<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/>`,
     clock: `<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>`,
+    chart: `<path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 6-7"/>`,
     gift: `<path d="M20 12v10H4V12"/><rect x="2" y="7" width="20" height="5" rx="1"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>`,
     users: `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>`,
     userplus: `<path d="M15 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/>`,
@@ -851,6 +854,7 @@ export function morePage(pw = "") {
   const content = `
     <div class="vhead"><div><h1>More</h1><p class="sub">Chats, reviews, gallery, paperwork, and settings</p></div></div>
     <div class="cardgrid">
+      ${moreLinkCard("chart", "Stats", "Quotes, bookings, conversion and revenue by month", navHref("stats"))}
       ${moreLinkCard("chat", "Chats", "Conversations that ended in a booking or a lead", navHref("chats"))}
       ${moreLinkCard("star", "Reviews", "Moderate and share client reviews", navHref("reviews"))}
       ${moreLinkCard("image", "Gallery", "Manage the photos on your website", navHref("gallery"))}
@@ -858,6 +862,66 @@ export function morePage(pw = "") {
       ${changePasswordCard(pw)}
     </div>`;
   return shellPage("More · Face Painting CA", appShell("more", content), DASHBOARD_SCRIPT);
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+// The monthly numbers from the Sheet (see api/_lib/stats.js for definitions),
+// plus links out to GA4 and Search Console for the traffic side.
+function statTile(label, value, sub = "") {
+  return `<div class="stat"><div class="sv">${value}</div><div class="sl">${esc(label)}</div>${sub ? `<div class="ss">${esc(sub)}</div>` : ""}</div>`;
+}
+
+function delta(cur, prev, fmt = (n) => String(n)) {
+  if (prev == null || cur == null) return "";
+  if (prev === 0) return cur === 0 ? "same as last month" : `${fmt(cur)} vs 0 last month`;
+  const pct = Math.round(((cur - prev) / prev) * 100);
+  return `${pct >= 0 ? "▲" : "▼"} ${Math.abs(pct)}% vs last month (${fmt(prev)})`;
+}
+
+function monthStatsCard(m, prev) {
+  const list = (pairs) => (pairs.length ? pairs.map(([k, n]) => `${esc(k)} (${n})`).join(" · ") : "—");
+  return `<div class="card fullrow">
+    <div class="cname" style="font-size:17px">${esc(m.label)}</div>
+    <div class="stats">
+      ${statTile("Quotes given", m.quotes, delta(m.quotes, prev?.quotes))}
+      ${statTile("Bookings", m.bookings, delta(m.bookings, prev?.bookings))}
+      ${statTile("Quote → booking", fmtPct(m.conversion), m.quotes ? `${m.bookings} of ${m.quotes} quotes booked` : "no quotes yet")}
+      ${statTile("Booked value", fmtMoney(m.pipeline), delta(m.pipeline, prev?.pipeline, fmtMoney))}
+      ${statTile("Revenue (events this month)", fmtMoney(m.revenue), `${m.events} event${m.events === 1 ? "" : "s"}`)}
+      ${statTile("Average quote", fmtMoney(m.avgQuote), m.cancelled ? `${m.cancelled} cancelled` : "")}
+    </div>
+    <div class="crmeta" style="margin-top:12px"><b>Most-quoted cities:</b> ${list(m.topCities)}</div>
+    <div class="crmeta" style="margin-top:4px"><b>Booked event types:</b> ${list(m.topEventTypes)}</div>
+  </div>`;
+}
+
+export function statsPage(bookings, quotes) {
+  const ym = currentMonthPacific();
+  const cur = statsForMonth(bookings, quotes, ym);
+  const prev = statsForMonth(bookings, quotes, shiftMonth(ym, -1));
+  const prev2 = statsForMonth(bookings, quotes, shiftMonth(ym, -2));
+  const all = statsAllTime(bookings, quotes);
+  const external = EXTERNAL_REPORTS.map((r) => moreLinkCard("chart", r.title, r.sub, r.href, { newTab: true })).join("");
+  const content = `
+    ${backToMore()}
+    <div class="vhead"><div><h1>Stats</h1><p class="sub">From your Sheet: quotes Sky gave, bookings that came in, and what they were worth</p></div></div>
+    <div class="cardgrid">
+      ${monthStatsCard(cur, prev)}
+      ${monthStatsCard(prev, prev2)}
+      <div class="card fullrow">
+        <div class="cname" style="font-size:17px">All time</div>
+        <div class="stats">
+          ${statTile("Quotes given", all.quotes)}
+          ${statTile("Bookings", all.bookings)}
+          ${statTile("Quote → booking", fmtPct(all.conversion))}
+          ${statTile("Total booked value", fmtMoney(all.revenue))}
+        </div>
+        <p class="crmeta" style="margin-top:12px">Quotes are counted from when tracking started (August 27, 2026), so the conversion rate only means something from September onwards. A monthly summary is emailed to you on the 1st.</p>
+      </div>
+      <div class="sec"><h2>Traffic &amp; search</h2><p class="sub">Live in Google's tools (opens in a new tab)</p></div>
+      ${external}
+    </div>`;
+  return shellPage("Stats · Face Painting CA", appShell("more", content), DASHBOARD_SCRIPT);
 }
 
 // ── Chats ─────────────────────────────────────────────────────────────────────
@@ -1359,6 +1423,10 @@ export default async function handler(req, res) {
     }
     if (view === "more") {
       return html(200, morePage(params.get("pw") || ""));
+    }
+    if (view === "stats") {
+      const [bookings, quotes] = await Promise.all([getBookingsFromSheet(), getQuotesFromSheet()]);
+      return html(200, statsPage(bookings, quotes));
     }
     if (view === "clients") {
       // Leads is a toggle within Clients now, not a separate destination — same

@@ -1,5 +1,5 @@
 import { google } from "googleapis";
-import { cached } from "./cache.js";
+import { cached, invalidate } from "./cache.js";
 
 function getAuthClient() {
   const oauth2Client = new google.auth.OAuth2(
@@ -489,6 +489,7 @@ export const getBookingsFromSheet = cached("bookingsFromSheet", async () => {
       location: (c[8] || "").trim(),
       quote: (c[9] || "").trim(),
       notes: (c[12] || "").trim(), // M Notes
+      bookedOn: (c[COL.BOOKED_ON] || "").trim(), // N, for month-by-month stats
       eventId: (c[COL.EVENT_ID] || "").trim(),
     }))
     .filter((b) => b.date);
@@ -592,6 +593,24 @@ async function ensureQuotesSheet(sheets, sheetId) {
   }
 }
 
+export const getQuotesFromSheet = cached("quotesFromSheet", async () => {
+  const client = getSheetsClient();
+  if (!client) return [];
+  const { sheets, sheetId } = client;
+  await ensureQuotesSheet(sheets, sheetId);
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: QUOTE_RANGE });
+  return (res.data.values || [])
+    .slice(1)
+    .map((c) => ({
+      shownOn: (c[0] || "").trim(),
+      city: (c[1] || "").trim(),
+      hours: Number(c[2]) || 0,
+      secondArtist: (c[3] || "").trim() === "yes",
+      total: Number(c[4]) || 0,
+    }))
+    .filter((q) => q.shownOn);
+});
+
 export async function addQuoteToSheet({ city, hours, secondArtist, total }) {
   const client = getSheetsClient();
   if (!client) return;
@@ -605,6 +624,7 @@ export async function addQuoteToSheet({ city, hours, secondArtist, total }) {
     insertDataOption: "INSERT_ROWS",
     requestBody: { values: [row] },
   });
+  invalidate("quotesFromSheet");
 }
 
 // ── Settings tab ──────────────────────────────────────────────────────────────

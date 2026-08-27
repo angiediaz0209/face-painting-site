@@ -210,3 +210,11 @@ h1{font-family:'Fraunces',Georgia,serif;font-variation-settings:'opsz' 96,'SOFT'
 .login input:focus{outline:2px solid #E85555;outline-offset:-1px;background:#fff}
 .login .btn-add{width:100%}
 .err{color:#B93B3B;font-size:14px;margin-top:8px}
+
+/* Stats page */
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}
+@media(min-width:760px){ .stats{grid-template-columns:repeat(3,1fr)} }
+.stat{background:#FBF7F3;border:1px solid #F0E6E0;border-radius:12px;padding:12px 14px}
+.stat .sv{font-size:26px;font-weight:800;color:#2A1B18;line-height:1.1}
+.stat .sl{font-size:13px;color:#6B5F5C;margin-top:4px}
+.stat .ss{font-size:12px;color:#948784;margin-top:3px}
