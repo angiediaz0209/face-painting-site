@@ -15,3 +15,14 @@ The React Compiler is not enabled on this template because of its impact on dev 
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
 # face-painting-ca
+
+## Tests
+
+Unit tests use [Vitest](https://vitest.dev) and live next to the code they cover
+(`shared/pricing.js` → `shared/pricing.test.js`). Test files are excluded from
+the production build.
+
+```bash
+npm test            # run once
+npm run test:watch  # re-run on save
+```
