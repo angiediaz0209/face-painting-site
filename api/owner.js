@@ -825,49 +825,111 @@ function moreLinkCard(iconName, title, sub, href, { newTab = false } = {}) {
   </a>`;
 }
 
-// Paperwork: a quick agreement for signing on paper. Type the details, and the
-// filled-in contract opens in a new tab with the print dialog up. Nothing is
-// saved: it's for a walk-up booking, a school that wants a hard copy, or a
-// client who prefers pen and paper. The same card also links to the unfilled
-// form. POST rather than GET so client details never sit in a URL or log.
-function quickAgreementCard() {
-  return `<div class="card fullrow">
-    <div style="display:flex;align-items:center;gap:13px;min-width:0">
-      <span style="display:flex;color:#B93B3B;flex-shrink:0">${icon("doc")}</span>
-      <div style="min-width:0">
-        <div class="cname" style="font-size:17px">Quick agreement</div>
-        <div class="crmeta">Fill in the details and print a contract to sign on paper. Nothing is saved to the calendar.</div>
+// ── Agreement (paper contract generator) ────────────────────────────────────
+// Its own page under More. Pick an existing client to prefill their details,
+// or type a new one; the filled-in contract opens in a new tab with signature
+// lines for signing by hand, optionally with the print dialog already up.
+// Nothing is saved to the calendar: this is for walk-up bookings, schools that
+// want a hard copy, and clients who prefer paper. Submitted by POST so client
+// details never sit in a URL or a log line.
+export function agreementPage(clients) {
+  const people = [...clients]
+    .filter((c) => c.name || c.organization)
+    .sort((a, b) => (a.name || a.organization || "").localeCompare(b.name || b.organization || ""))
+    .map((c) => ({
+      key: c.key || "",
+      name: c.name || "",
+      organization: c.organization || "",
+      phone: c.phone || "",
+      email: c.email || "",
+      eventType: c.lastEventType || "",
+      location: c.lastLocation || "",
+      quote: c.lastQuote ? `$${c.lastQuote}` : "",
+      lastDate: c.lastEventDate || "",
+    }));
+  const options = people
+    .map((p, i) => {
+      const label = [p.name, p.organization].filter(Boolean).join(" · ") + (p.lastDate ? ` (${shortDate(p.lastDate)})` : "");
+      return `<option value="${i}">${esc(label)}</option>`;
+    })
+    .join("");
+  // The client list rides along as JSON so the picker can prefill without a
+  // round trip. </ is escaped so a name can't close the script tag.
+  const data = JSON.stringify(people).replace(/</g, "\\u003c");
+
+  const content = `
+    <div class="vhead"><div><h1>Agreement</h1><p class="sub">Print a booking agreement to sign on paper</p></div></div>
+    <div class="cardgrid">
+      <div class="card fullrow">
+        <div class="cname" style="font-size:16px">Who is it for?</div>
+        <p class="crmeta" style="margin-top:4px">Pick an existing client to fill in their details, or leave it on "New client" and type them below.</p>
+        <select id="ag-client" class="bin" style="margin-top:10px;width:100%;padding:11px 12px;border:1px solid #E9DFD5;border-radius:10px;font-size:16px;background:#FBF7F3;font-family:inherit;color:#211A19">
+          <option value="">New client</option>
+          ${options}
+        </select>
+        ${people.length ? "" : `<p class="crmeta" style="margin-top:8px">No clients on file yet — add them on the Clients tab and they'll show up here.</p>`}
+
+        <form id="ag-form" method="POST" action="/api/owner" target="_blank" class="bform" style="margin-top:14px" autocomplete="off">
+          <input type="hidden" name="action" value="quick-agreement">
+          <div class="sec" style="margin:4px 0 0">Client</div>
+          <div class="form-row">
+            <input class="bin" type="text" name="clientName" placeholder="Client name *" required>
+            <input class="bin" type="text" name="organization" placeholder="Organization (optional)">
+          </div>
+          <div class="form-row">
+            <input class="bin" type="tel" name="clientPhone" placeholder="Phone">
+            <input class="bin" type="email" name="clientEmail" placeholder="Email">
+          </div>
+          <div class="sec" style="margin:8px 0 0">Event</div>
+          <div class="form-row">
+            <input class="bin" type="text" name="eventType" placeholder="Event (e.g. Birthday party)">
+            <input class="bin" type="text" name="guestCount" placeholder="Guests">
+          </div>
+          <div class="form-row">
+            <input type="date" name="date" required>
+            <input type="time" name="startTime" required>
+            <input type="time" name="endTime">
+          </div>
+          <input class="bin" type="text" name="location" placeholder="Location / address">
+          <input class="bin" type="text" name="quote" placeholder="Total (e.g. $300)" inputmode="decimal">
+          <div class="cactions" style="margin-top:6px">
+            <button class="btn btn-add" type="submit" name="print" value="1">🖨 Print agreement</button>
+            <button class="btn btn-resched" type="submit">Preview</button>
+            <button class="btn btn-resched" type="reset" id="ag-clear">Clear</button>
+          </div>
+          <p class="crmeta">Opens in a new tab. Nothing is saved to the calendar — for a real booking, use Add event on Bookings and print the agreement from there.</p>
+        </form>
+      </div>
+
+      <div class="card fullrow">
+        <div style="display:flex;align-items:center;gap:13px;min-width:0">
+          <span style="display:flex;color:#B93B3B;flex-shrink:0">${icon("doc")}</span>
+          <div style="min-width:0">
+            <div class="cname" style="font-size:16px">Blank form</div>
+            <div class="crmeta">An unfilled copy with write-in lines, for filling out by hand.</div>
+          </div>
+        </div>
+        <div class="cactions" style="margin-top:12px">
+          <a class="btn btn-add" href="/api/status?action=contract-blank&print=1" target="_blank" rel="noopener">🖨 Print blank</a>
+          <a class="btn btn-resched" href="/api/status?action=contract-blank" target="_blank" rel="noopener">Preview</a>
+        </div>
       </div>
     </div>
-    <form method="POST" action="/api/owner" target="_blank" class="bform" style="margin-top:12px" autocomplete="off">
-      <input type="hidden" name="action" value="quick-agreement">
-      <div class="form-row">
-        <input class="bin" type="text" name="clientName" placeholder="Client name *" required>
-        <input class="bin" type="text" name="organization" placeholder="Organization (optional)">
-      </div>
-      <div class="form-row">
-        <input class="bin" type="tel" name="clientPhone" placeholder="Phone">
-        <input class="bin" type="email" name="clientEmail" placeholder="Email">
-      </div>
-      <div class="form-row">
-        <input class="bin" type="text" name="eventType" placeholder="Event (e.g. Birthday party)">
-        <input class="bin" type="text" name="guestCount" placeholder="Guests">
-      </div>
-      <div class="form-row">
-        <input type="date" name="date" required>
-        <input type="time" name="startTime" required>
-        <input type="time" name="endTime">
-      </div>
-      <input class="bin" type="text" name="location" placeholder="Location / address">
-      <input class="bin" type="text" name="quote" placeholder="Total (e.g. $300)" inputmode="decimal">
-      <div class="cactions" style="margin-top:4px">
-        <button class="btn btn-add" type="submit" name="print" value="1">🖨 Print agreement</button>
-        <button class="btn btn-resched" type="submit">Preview</button>
-        <span class="spacer"></span>
-        <a class="btn btn-resched" href="/api/status?action=contract-blank&print=1" target="_blank" rel="noopener">Blank form</a>
-      </div>
-    </form>
-  </div>`;
+    <script id="ag-data" type="application/json">${data}</script>
+    <script>
+    (function(){
+      var people = JSON.parse(document.getElementById('ag-data').textContent || '[]');
+      var sel = document.getElementById('ag-client'), form = document.getElementById('ag-form');
+      var map = { clientName:'name', organization:'organization', clientPhone:'phone', clientEmail:'email', eventType:'eventType', location:'location', quote:'quote' };
+      function fill(p){
+        for (var field in map) { var el = form.elements[field]; if (el) el.value = p ? (p[map[field]] || '') : ''; }
+        if (p) { var d = form.elements.date; if (d && !d.value) d.focus(); }
+      }
+      sel.addEventListener('change', function(){ fill(sel.value === '' ? null : people[+sel.value]); });
+      document.getElementById('ag-clear').addEventListener('click', function(){ sel.value = ''; });
+    })();
+    </script>`;
+  return shellPage("Agreement · Face Painting CA", appShell("more", content), DASHBOARD_SCRIPT);
 }
 
 // Outcomes of a change-password attempt, keyed by the `pw` query param the
@@ -909,7 +971,7 @@ export function morePage(pw = "") {
       ${moreLinkCard("chat", "Chats", "Conversations that ended in a booking or a lead", navHref("chats"))}
       ${moreLinkCard("star", "Reviews", "Moderate and share client reviews", navHref("reviews"))}
       ${moreLinkCard("image", "Gallery", "Manage the photos on your website", navHref("gallery"))}
-      ${quickAgreementCard()}
+      ${moreLinkCard("doc", "Agreement", "Print a contract for an existing or new client, or a blank form", navHref("agreement"))}
       ${changePasswordCard(pw)}
     </div>`;
   return shellPage("More · Face Painting CA", appShell("more", content), DASHBOARD_SCRIPT);
@@ -1522,6 +1584,9 @@ export default async function handler(req, res) {
     }
     if (view === "more") {
       return html(200, morePage(params.get("pw") || ""));
+    }
+    if (view === "agreement") {
+      return html(200, agreementPage(await getClients()));
     }
     if (view === "stats") {
       const [bookings, quotes] = await Promise.all([getBookingsFromSheet(), getQuotesFromSheet()]);
