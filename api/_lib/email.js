@@ -19,6 +19,12 @@ const FROM_NAME = "Face Painting California";
 // of this site, and the form just 404s there instead of reaching the server.
 const BASE_URL = process.env.APP_BASE_URL || "https://face-painting-site.vercel.app";
 const BUSINESS_PHONE = "(415) 991-9374";
+// The legal entity behind the brand. It is the contracting party on the
+// agreement and the issuer on the receipt; "Face Painting California" stays on
+// letterheads and everywhere client-facing. Once the DBA is filed with Marin
+// County, the intro wording can become "Condor Enterprise Group LLC, doing
+// business as Face Painting California".
+const LEGAL_NAME = "Condor Enterprise Group LLC";
 const SMS_NUMBER = "4159919374";
 const BUSINESS_EMAIL = "steff.diaz0209@gmail.com"; // display only
 const CORAL = "#e8836b";
@@ -626,12 +632,12 @@ export function receiptHtml(b) {
 <style>${paperCss()}</style></head>
 <body>
   <div class="toolbar"><button onclick="window.print()">🖨 Print</button><div class="print-hint">For a clean copy, untick "Headers and footers" in the print dialog.</div></div>
-  <table class="sheet"><tfoot><tr><td><div class="print-foot"><span>Face Painting California · Receipt No. ${esc(receiptNo)} · ${esc(b.client || "")}</span><span>Issued ${esc(receiptTodayPacific())}</span></div></td></tr></tfoot><tbody><tr><td>
+  <table class="sheet"><tfoot><tr><td><div class="print-foot"><span>${esc(LEGAL_NAME)} · Face Painting California · Receipt No. ${esc(receiptNo)} · ${esc(b.client || "")}</span><span>Issued ${esc(receiptTodayPacific())}</span></div></td></tr></tfoot><tbody><tr><td>
   <div class="paper">
     <div class="letterhead">
       <div>
         <div class="brand-name">Face Painting California</div>
-        <div class="brand-meta">${esc(BUSINESS_PHONE)}<br>${esc(BUSINESS_EMAIL)}<br>Serving Marin County, San Francisco &amp; Santa Rosa</div>
+        <div class="brand-meta">${esc(LEGAL_NAME)}<br>${esc(BUSINESS_PHONE)}<br>${esc(BUSINESS_EMAIL)}<br>Serving Marin County, San Francisco &amp; Santa Rosa</div>
       </div>
       <div class="doc-title">
         <h1>Receipt</h1>
@@ -672,7 +678,7 @@ export function receiptHtml(b) {
 // signContract(), and this page then renders the signature block instead of
 // the form. Bump CONTRACT_VERSION whenever the wording of the terms changes,
 // so a stored signature always says which version the client agreed to.
-export const CONTRACT_VERSION = "2026-08";
+export const CONTRACT_VERSION = "2026-08.2"; // .2: Condor Enterprise Group LLC named as the contracting party
 
 // Plain-English terms. Kept as data so the wording is easy to edit in one
 // place. Each entry: [heading, paragraph].
@@ -823,7 +829,7 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
       <div class="paper-sig">
         <div class="ps-row"><div class="ps-cell wide"><div class="ps-line"></div><div class="ps-cap">Client signature</div></div><div class="ps-cell"><div class="ps-line"></div><div class="ps-cap">Date</div></div></div>
         <div class="ps-row"><div class="ps-cell wide"><div class="ps-line"></div><div class="ps-cap">Client name (printed)</div></div></div>
-        <div class="ps-row"><div class="ps-cell wide"><div class="ps-line"></div><div class="ps-cap">For Face Painting California</div></div><div class="ps-cell"><div class="ps-line"></div><div class="ps-cap">Date</div></div></div>
+        <div class="ps-row"><div class="ps-cell wide"><div class="ps-line"></div><div class="ps-cap">For ${esc(LEGAL_NAME)}</div></div><div class="ps-cell"><div class="ps-line"></div><div class="ps-cap">Date</div></div></div>
         <div class="sig-note">Terms version ${esc(CONTRACT_VERSION)}. Both sides keep a copy.</div>
       </div>`;
   } else if (cancelled) {
@@ -834,7 +840,7 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
         ${b.contractSignatureUrl ? `<div class="sig-row"><span class="sig-k">Signature</span><span class="sig-v"><img class="sig-img" src="${esc(b.contractSignatureDataUrl || b.contractSignatureUrl)}" alt="Signature of ${esc(b.contractSignedName || b.client || "client")}"></span></div>` : ""}
         <div class="sig-row"><span class="sig-k">${b.contractSignatureUrl ? "Name" : "Signed by"}</span><span class="sig-v sig-name">${esc(b.contractSignedName || b.client || "")}</span></div>
         <div class="sig-row"><span class="sig-k">On</span><span class="sig-v">${esc(fmtSignedAt(b.contractSignedAt))}</span></div>
-        <div class="sig-row"><span class="sig-k">For</span><span class="sig-v">Face Painting California</span></div>
+        <div class="sig-row"><span class="sig-k">For</span><span class="sig-v">${esc(LEGAL_NAME)}</span></div>
         <div class="sig-note">Signed electronically. Terms version ${esc(b.contractVersion || CONTRACT_VERSION)}. Keep or print this page for your records.</div>
       </div>`;
   } else if (canSign) {
@@ -963,7 +969,10 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
     /* The signature block never sits alone on its own page: it's kept whole and
        pulled up with the last term so both land together. */
     .keep,.signature,table.facts,.facts-blank,.paper-sig .ps-row{break-inside:avoid;page-break-inside:avoid}
-    .facts-blank{row-gap:20px;margin-bottom:22px;font-size:13px}
+    .facts-blank{row-gap:16px;margin-bottom:18px;font-size:13px}
+    .paper-sig .ps-row{margin-top:20px}
+    .paper-sig .ps-line{height:22px}
+    .paper-sig .sig-note{margin-top:8px}
     .fb-l{border-color:#000}
     .signature{margin-top:20px;padding-top:14px}
     .intro{font-size:13px;line-height:1.55;margin-bottom:16px}
@@ -972,18 +981,18 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
     table.facts td{padding:7px 0;font-size:13px}
     .term{margin-bottom:10px}
     .term h4{font-size:12.5px;margin-bottom:2px}
-    .term p{font-size:12.5px;line-height:1.5}
+    .term p{font-size:12.5px;line-height:1.45}
     .terms h3{margin-bottom:8px}
   }
 </style></head>
 <body>
   <div class="toolbar"><button onclick="window.print()">🖨 Print</button><div class="print-hint">For a clean copy, untick "Headers and footers" in the print dialog.</div></div>
-  <table class="sheet"><tfoot><tr><td><div class="print-foot"><span>Face Painting California · Booking Agreement No. ${esc(docNo)}${blank ? "" : ` · ${esc(b.client || "")}${b.date ? ` · ${esc(fmtDate(b.date))}` : ""}`}</span><span>Terms v${esc(blank ? CONTRACT_VERSION : b.contractVersion || CONTRACT_VERSION)}${signed ? " · Signed electronically" : ""}</span></div></td></tr></tfoot><tbody><tr><td>
+  <table class="sheet"><tfoot><tr><td><div class="print-foot"><span>${esc(LEGAL_NAME)} · Face Painting California · Booking Agreement No. ${esc(docNo)}${blank ? "" : ` · ${esc(b.client || "")}${b.date ? ` · ${esc(fmtDate(b.date))}` : ""}`}</span><span>Terms v${esc(blank ? CONTRACT_VERSION : b.contractVersion || CONTRACT_VERSION)}${signed ? " · Signed electronically" : ""}</span></div></td></tr></tfoot><tbody><tr><td>
   <div class="paper">
     <div class="letterhead">
       <div>
         <div class="brand-name">Face Painting California</div>
-        <div class="brand-meta">${esc(BUSINESS_PHONE)}<br>${esc(BUSINESS_EMAIL)}<br>Serving Marin County, San Francisco &amp; Santa Rosa</div>
+        <div class="brand-meta">${esc(LEGAL_NAME)}<br>${esc(BUSINESS_PHONE)}<br>${esc(BUSINESS_EMAIL)}<br>Serving Marin County, San Francisco &amp; Santa Rosa</div>
       </div>
       <div class="doc-title">
         <h1>Booking Agreement</h1>
@@ -992,7 +1001,7 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
       </div>
     </div>
 
-    <p class="intro">This agreement is between <strong>Face Painting California</strong> ("we", "us") and the client below ("you") for the face painting booking described here. It's written in plain English on purpose: it's meant to be read, not just signed.</p>
+    <p class="intro">This agreement is between <strong>${esc(LEGAL_NAME)}</strong> ("we", "us"), providing face painting services as <em>Face Painting California</em>, and the client below ("you") for the booking described here. It's written in plain English on purpose: it's meant to be read, not just signed.</p>
 
     <div class="two-col">
       <div class="col">
@@ -1001,7 +1010,7 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
       </div>
       <div class="col">
         <h3>Provider</h3>
-        <p><strong>Face Painting California</strong><br>${esc(BUSINESS_PHONE)}<br>${esc(BUSINESS_EMAIL)}</p>
+        <p><strong>${esc(LEGAL_NAME)}</strong><br>Face Painting California<br>${esc(BUSINESS_PHONE)}<br>${esc(BUSINESS_EMAIL)}</p>
       </div>
     </div>
 
