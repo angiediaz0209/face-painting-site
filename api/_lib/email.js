@@ -648,7 +648,7 @@ export function receiptHtml(b) {
     <div class="letterhead">
       <div>
         <div class="brand-name">Face Painting California</div>
-        <div class="brand-meta">${esc(LEGAL_NAME)}<br>${esc(BUSINESS_PHONE)}<br>${esc(BUSINESS_EMAIL)}<br>Serving Marin County, San Francisco &amp; Santa Rosa</div>
+        <div class="brand-meta">${esc(LEGAL_NAME)}<br>${esc(BUSINESS_PHONE)}<br>${esc(BUSINESS_EMAIL)}</div>
       </div>
       <div class="doc-title">
         <h1>Receipt</h1>
@@ -1048,7 +1048,7 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
     <div class="letterhead">
       <div>
         <div class="brand-name">Face Painting California</div>
-        <div class="brand-meta">${esc(LEGAL_NAME)}<br>${esc(BUSINESS_PHONE)}<br>${esc(BUSINESS_EMAIL)}<br>Serving Marin County, San Francisco &amp; Santa Rosa</div>
+        <div class="brand-meta">${esc(LEGAL_NAME)}<br>${esc(BUSINESS_PHONE)}<br>${esc(BUSINESS_EMAIL)}</div>
       </div>
       <div class="doc-title">
         <h1>Booking Agreement</h1>
