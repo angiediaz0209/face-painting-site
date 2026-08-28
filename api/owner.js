@@ -69,7 +69,7 @@ function shellPage(title, body, script = "") {
     <meta name="format-detection" content="telephone=no">
     <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2240%22%20fill%3D%22%23E85555%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%2246%22%20fill%3D%22%23fff%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2279%22%20r%3D%227.5%22%20fill%3D%22%23F6A6A6%22%2F%3E%3Ccircle%20cx%3D%22107%22%20cy%3D%2277%22%20r%3D%227.5%22%20fill%3D%22%23D9922B%22%2F%3E%3Ccircle%20cx%3D%22115%22%20cy%3D%22103%22%20r%3D%227.5%22%20fill%3D%22%23B93B3B%22%2F%3E%3Ccircle%20cx%3D%2280%22%20cy%3D%22113%22%20r%3D%227.5%22%20fill%3D%22%232A1B18%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%229%22%20fill%3D%22%23FBF7F3%22%2F%3E%3C%2Fsvg%3E">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2240%22%20fill%3D%22%23E85555%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%2246%22%20fill%3D%22%23fff%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2279%22%20r%3D%227.5%22%20fill%3D%22%23F6A6A6%22%2F%3E%3Ccircle%20cx%3D%22107%22%20cy%3D%2277%22%20r%3D%227.5%22%20fill%3D%22%23D9922B%22%2F%3E%3Ccircle%20cx%3D%22115%22%20cy%3D%22103%22%20r%3D%227.5%22%20fill%3D%22%23B93B3B%22%2F%3E%3Ccircle%20cx%3D%2280%22%20cy%3D%22113%22%20r%3D%227.5%22%20fill%3D%22%232A1B18%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%229%22%20fill%3D%22%23FBF7F3%22%2F%3E%3C%2Fsvg%3E">
-    <link rel="stylesheet" href="/owner-dashboard.css?v=8">
+    <link rel="stylesheet" href="/owner-dashboard.css?v=9">
     <title>${title}</title>`;
   return `<!doctype html><html><head>${head}</head><body>${body}${script}</body></html>`;
 }
@@ -447,19 +447,39 @@ function icon(name) {
 // behind "More": they're used far less often than the first three, and eight
 // items across a phone-width tab bar left each one about 34px wide with 9.5px
 // labels. Four tabs doubles that.
+// The phone tab bar: four slots, everything else lives under More.
 const NAV_ITEMS = [
   ["bookings", "Bookings", "cal"],
   ["clients", "Clients", "users"],
   ["followups", "Follow-ups", "gift"],
   ["more", "More", "grid"],
 ];
+// The desktop sidebar has room for every page, so it lists them all; null is
+// a divider. "Settings" is the More page (password and anything else that
+// isn't a destination of its own).
+const SIDE_ITEMS = [
+  ["bookings", "Bookings", "cal"],
+  ["clients", "Clients", "users"],
+  ["followups", "Follow-ups", "gift"],
+  null,
+  ["stats", "Stats", "chart"],
+  ["chats", "Chats", "chat"],
+  ["reviews", "Reviews", "star"],
+  ["gallery", "Gallery", "image"],
+  ["agreement", "Agreement", "doc"],
+  null,
+  ["more", "Settings", "grid"],
+];
+const PRIMARY_TABS = new Set(["bookings", "clients", "followups"]);
 const navHref = (k) => `/api/owner${k === "bookings" ? "" : `?view=${k}`}`;
 
 const BRAND_MARK = `<svg width="30" height="30" viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#E85555"/><circle cx="20" cy="21" r="10.5" fill="#fff"/><circle cx="16" cy="17" r="2" fill="#F6A6A6"/><circle cx="24" cy="16.5" r="2" fill="#D9922B"/><circle cx="25.5" cy="23" r="2" fill="#B93B3B"/><circle cx="17.5" cy="25.5" r="2" fill="#2A1B18"/><circle cx="20" cy="21" r="2.4" fill="#FBF7F3"/></svg>`;
 
 function sideNav(active) {
-  const links = NAV_ITEMS.map(
-    ([k, label, ic]) => `<a class="${k === active ? "on" : ""}" href="${navHref(k)}"><span class="si">${icon(ic)}</span>${label}</a>`
+  const links = SIDE_ITEMS.map((item) =>
+    item
+      ? `<a class="${item[0] === active ? "on" : ""}" href="${navHref(item[0])}"><span class="si">${icon(item[2])}</span>${item[1]}</a>`
+      : `<div class="div"></div>`
   ).join("");
   return `<aside class="sidebar">
     <div class="brand">${BRAND_MARK}<span class="bt">Face Painting<b>Dashboard</b></span></div>
@@ -468,8 +488,10 @@ function sideNav(active) {
 }
 
 function tabBar(active) {
+  // Sub-pages (stats, gallery, ...) light up the More tab on phones.
+  const tab = PRIMARY_TABS.has(active) ? active : "more";
   const links = NAV_ITEMS.map(
-    ([k, label, ic]) => `<a class="${k === active ? "on" : ""}" href="${navHref(k)}"><span class="ic">${icon(ic)}</span><span class="lbl">${label}</span></a>`
+    ([k, label, ic]) => `<a class="${k === tab ? "on" : ""}" href="${navHref(k)}"><span class="ic">${icon(ic)}</span><span class="lbl">${label}</span></a>`
   ).join("");
   return `<nav class="tabbar">${links}</nav>`;
 }
@@ -806,7 +828,7 @@ export function reviewsPage(reviews, base) {
       <div class="sec">Live on your site</div>
       ${approved.length ? approved.map(reviewCard).join("") : `<div class="empty fullrow">No approved reviews yet.</div>`}
     </div>`;
-  return shellPage("Reviews · Face Painting CA", appShell("more", content), DASHBOARD_SCRIPT);
+  return shellPage("Reviews · Face Painting CA", appShell("reviews", content), DASHBOARD_SCRIPT);
 }
 
 // ── More (hub for the lower-frequency pages) ────────────────────────────────
@@ -856,7 +878,7 @@ export function agreementShellPage() {
     <div class="vhead"><div><h1>Agreement</h1><p class="sub">Tap any line on the contract to fill it in, then print</p></div>
       <a class="btn btn-resched" href="/api/owner?view=agreement-doc" target="_blank" rel="noopener" style="flex-shrink:0">Full screen ↗</a></div>
     <iframe class="ag-frame" src="/api/owner?view=agreement-doc" title="Booking agreement"></iframe>`;
-  return shellPage("Agreement · Face Painting CA", appShell("more", content), DASHBOARD_SCRIPT);
+  return shellPage("Agreement · Face Painting CA", appShell("agreement", content), DASHBOARD_SCRIPT);
 }
 
 // Outcomes of a change-password attempt, keyed by the `pw` query param the
@@ -961,7 +983,7 @@ export function statsPage(bookings, quotes) {
       <div class="sec"><h2>Traffic &amp; search</h2><p class="sub">Live in Google's tools (opens in a new tab)</p></div>
       ${external}
     </div>`;
-  return shellPage("Stats · Face Painting CA", appShell("more", content), DASHBOARD_SCRIPT);
+  return shellPage("Stats · Face Painting CA", appShell("stats", content), DASHBOARD_SCRIPT);
 }
 
 // ── Chats ─────────────────────────────────────────────────────────────────────
@@ -1018,7 +1040,7 @@ export function chatsPage(conversations) {
           : `<div class="empty fullrow">No conversations yet. They'll show up here once someone books or leaves their details with Sky.</div>`
       }
     </div>`;
-  return shellPage("Chats · Face Painting CA", appShell("more", content), DASHBOARD_SCRIPT);
+  return shellPage("Chats · Face Painting CA", appShell("chats", content), DASHBOARD_SCRIPT);
 }
 
 // Client-side resize (keeps uploads small + fast) then POST the image bytes.
@@ -1079,7 +1101,7 @@ export function galleryPage(gallery) {
     <div id="galstatus" class="hint"></div>
     <p class="hint">Photos show in your public site's gallery. Uploads are resized automatically; tap Remove to take one down. (If uploads say storage isn't set up, enable Blob in Vercel → Storage.)</p>
     <div class="galgrid">${grid}</div>`;
-  return shellPage("Gallery · Face Painting CA", appShell("more", content), DASHBOARD_SCRIPT + GALLERY_SCRIPT);
+  return shellPage("Gallery · Face Painting CA", appShell("gallery", content), DASHBOARD_SCRIPT + GALLERY_SCRIPT);
 }
 
 /**

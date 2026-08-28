@@ -148,6 +148,7 @@ h1{font-family:'Fraunces',Georgia,serif;font-variation-settings:'opsz' 96,'SOFT'
 .sidenav a .si svg{width:20px;height:20px}
 .sidenav a:hover{background:#FBF7F3;color:#211A19}
 .sidenav a.on{background:#F3EBE2;color:#211A19}
+.sidenav .div{height:1px;background:#EFE6DD;margin:8px 10px}
 
 /* View header (title + optional action) */
 .vhead{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:14px}
