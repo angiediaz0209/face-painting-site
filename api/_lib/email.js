@@ -778,21 +778,26 @@ export async function withInlineSignature(b) {
  * The booking agreement page. `b` is a normalized booking; pass `eventId` +
  * `token` (the same client HMAC that gated the page) to render the sign form.
  * `error` is a short message shown above the form after a failed submit.
+ * `paper` renders a filled-in copy with signature lines for signing by hand
+ * (the dashboard's quick agreement: details typed by the owner, no booking
+ * on the calendar behind it, so nothing to sign online).
  */
-export function contractHtml(b, { eventId, token, error = "", blank = false, autoPrint = false } = {}) {
+export function contractHtml(b, { eventId, token, error = "", blank = false, paper = false, autoPrint = false } = {}) {
   const status = (b.status || "PENDING").toUpperCase();
-  const cancelled = !blank && status === "CANCELLED";
-  const signed = !blank && !!b.contractSignedAt;
+  const cancelled = !blank && !paper && status === "CANCELLED";
+  const signed = !blank && !paper && !!b.contractSignedAt;
   const s = blank
     ? { label: "Blank form", color: MUTED }
+    : paper
+    ? { label: "Sign on paper", color: CORAL_RED }
     : cancelled
     ? CONTRACT_STATUS.CANCELLED
     : signed
     ? CONTRACT_STATUS.SIGNED
     : CONTRACT_STATUS.UNSIGNED;
   const eid = (b.eventId || "").replace(/[^a-zA-Z0-9]/g, "");
-  const docNo = blank ? "________" : (eid.slice(-8) || "000000").toUpperCase();
-  const canSign = !blank && !cancelled && !signed && eventId && token;
+  const docNo = blank || (paper && !eid) ? "________" : (eid.slice(-8) || "000000").toUpperCase();
+  const canSign = !blank && !paper && !cancelled && !signed && eventId && token;
 
   // Blank mode: the same document with write-in lines instead of booking data,
   // for signing on paper (at the event, or for a school that wants a hard copy).
@@ -824,7 +829,7 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
   const lastTermHtml = termHtml(CONTRACT_TERMS[CONTRACT_TERMS.length - 1], CONTRACT_TERMS.length - 1);
 
   let signatureBlock;
-  if (blank) {
+  if (blank || paper) {
     signatureBlock = `
       <div class="paper-sig">
         <div class="ps-row"><div class="ps-cell wide"><div class="ps-line"></div><div class="ps-cap">Client signature</div></div><div class="ps-cell"><div class="ps-line"></div><div class="ps-cap">Date</div></div></div>
@@ -1035,7 +1040,7 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
     <div class="keep">
       <div class="terms">${lastTermHtml}</div>
       <div class="signature">
-        <h3>${signed ? "Signature" : blank ? "Signatures" : "Sign here"}</h3>
+        <h3>${signed ? "Signature" : blank || paper ? "Signatures" : "Sign here"}</h3>
         ${signatureBlock}
       </div>
     </div>

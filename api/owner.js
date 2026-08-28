@@ -14,7 +14,7 @@ import {
   addGalleryImage,
   removeGalleryImage,
 } from "./_lib/sheets.js";
-import { fmtTimeRange, fmtSignedAt, birthdayPromoHtml, agreementRequestHtml, sendEmail } from "./_lib/email.js";
+import { fmtTimeRange, fmtSignedAt, birthdayPromoHtml, agreementRequestHtml, contractHtml, sendEmail } from "./_lib/email.js";
 import {
   getClients,
   upsertClient,
@@ -825,21 +825,48 @@ function moreLinkCard(iconName, title, sub, href, { newTab = false } = {}) {
   </a>`;
 }
 
-// One-tap paperwork: opens the unfilled agreement with the print dialog already
-// up, for signing on paper at an event or for a school that wants a hard copy.
-function blankAgreementCard() {
-  return `<div class="card">
+// Paperwork: a quick agreement for signing on paper. Type the details, and the
+// filled-in contract opens in a new tab with the print dialog up. Nothing is
+// saved: it's for a walk-up booking, a school that wants a hard copy, or a
+// client who prefers pen and paper. The same card also links to the unfilled
+// form. POST rather than GET so client details never sit in a URL or log.
+function quickAgreementCard() {
+  return `<div class="card fullrow">
     <div style="display:flex;align-items:center;gap:13px;min-width:0">
       <span style="display:flex;color:#B93B3B;flex-shrink:0">${icon("doc")}</span>
       <div style="min-width:0">
-        <div class="cname" style="font-size:17px">Blank agreement</div>
-        <div class="crmeta">An unfilled copy of the booking agreement, ready to print and sign on paper.</div>
+        <div class="cname" style="font-size:17px">Quick agreement</div>
+        <div class="crmeta">Fill in the details and print a contract to sign on paper. Nothing is saved to the calendar.</div>
       </div>
     </div>
-    <div class="cactions" style="margin-top:14px">
-      <a class="btn btn-add" href="/api/status?action=contract-blank&print=1" target="_blank" rel="noopener">🖨 Print</a>
-      <a class="btn btn-resched" href="/api/status?action=contract-blank" target="_blank" rel="noopener">Preview</a>
-    </div>
+    <form method="POST" action="/api/owner" target="_blank" class="bform" style="margin-top:12px" autocomplete="off">
+      <input type="hidden" name="action" value="quick-agreement">
+      <div class="form-row">
+        <input class="bin" type="text" name="clientName" placeholder="Client name *" required>
+        <input class="bin" type="text" name="organization" placeholder="Organization (optional)">
+      </div>
+      <div class="form-row">
+        <input class="bin" type="tel" name="clientPhone" placeholder="Phone">
+        <input class="bin" type="email" name="clientEmail" placeholder="Email">
+      </div>
+      <div class="form-row">
+        <input class="bin" type="text" name="eventType" placeholder="Event (e.g. Birthday party)">
+        <input class="bin" type="text" name="guestCount" placeholder="Guests">
+      </div>
+      <div class="form-row">
+        <input type="date" name="date" required>
+        <input type="time" name="startTime" required>
+        <input type="time" name="endTime">
+      </div>
+      <input class="bin" type="text" name="location" placeholder="Location / address">
+      <input class="bin" type="text" name="quote" placeholder="Total (e.g. $300)" inputmode="decimal">
+      <div class="cactions" style="margin-top:4px">
+        <button class="btn btn-add" type="submit" name="print" value="1">🖨 Print agreement</button>
+        <button class="btn btn-resched" type="submit">Preview</button>
+        <span class="spacer"></span>
+        <a class="btn btn-resched" href="/api/status?action=contract-blank&print=1" target="_blank" rel="noopener">Blank form</a>
+      </div>
+    </form>
   </div>`;
 }
 
@@ -882,7 +909,7 @@ export function morePage(pw = "") {
       ${moreLinkCard("chat", "Chats", "Conversations that ended in a booking or a lead", navHref("chats"))}
       ${moreLinkCard("star", "Reviews", "Moderate and share client reviews", navHref("reviews"))}
       ${moreLinkCard("image", "Gallery", "Manage the photos on your website", navHref("gallery"))}
-      ${blankAgreementCard()}
+      ${quickAgreementCard()}
       ${changePasswordCard(pw)}
     </div>`;
   return shellPage("More · Face Painting CA", appShell("more", content), DASHBOARD_SCRIPT);
@@ -1421,6 +1448,26 @@ export default async function handler(req, res) {
         }
         res.setHeader("Set-Cookie", sessionCookie(req, await sessionToken()));
         return finish("ok");
+      }
+
+      if (body.action === "quick-agreement") {
+        const t = (x, n = 200) => String(x || "").trim().slice(0, n);
+        const quote = t(body.quote, 30);
+        const time = [t(body.startTime, 5), t(body.endTime, 5)].filter(Boolean).join("-");
+        const b = {
+          client: t(body.clientName, 120),
+          organization: t(body.organization, 120),
+          phone: t(body.clientPhone, 40),
+          email: t(body.clientEmail, 120),
+          eventType: t(body.eventType, 120),
+          guests: t(body.guestCount, 40),
+          date: /^\d{4}-\d{2}-\d{2}$/.test(t(body.date, 10)) ? t(body.date, 10) : "",
+          time,
+          location: t(body.location, 300),
+          quote: quote && /^\d/.test(quote) ? `${quote}` : quote,
+        };
+        res.setHeader("Cache-Control", "no-store");
+        return html(200, contractHtml(b, { paper: true, autoPrint: body.print === "1" }));
       }
 
       const proto = req.headers["x-forwarded-proto"] || (String(req.headers.host || "").includes("localhost") ? "http" : "https");
