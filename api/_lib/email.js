@@ -801,7 +801,7 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
     : [b.email, b.phone].filter(Boolean).map(esc).join("<br>");
 
   const rows = blank
-    ? [["Event", ""], ["Date", ""], ["Time", ""], ["Location", ""], ["Guests", ""], ["Total", ""]]
+    ? []
     : [
         ["Event", [b.eventType, b.occasion].filter(Boolean).join(" — ")],
         ["Date", fmtDate(b.date)],
@@ -900,7 +900,14 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
   table.facts td{padding:9px 0;border-bottom:1px solid ${LINE};font-size:14.5px;color:${INK};vertical-align:top}
   table.facts td.k{width:110px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:${MUTED};font-weight:700;padding-top:12px}
   table.facts td.total{font-weight:800;color:${CORAL_RED}}
-  table.facts.blank td{padding:17px 0}
+  /* Blank form: write-in lines in two columns, same look as the Client block
+     above, so the booking details take three rows instead of six. */
+  .facts-blank{display:grid;grid-template-columns:1fr 1fr;column-gap:36px;row-gap:22px;margin-bottom:30px}
+  .fb{display:flex;align-items:flex-end;gap:8px;font-size:14.5px;color:${INK}}
+  .fb.wide{grid-column:1 / -1}
+  .fb-k{flex-shrink:0}
+  .fb-l{flex:1;border-bottom:1px solid ${INK};height:18px}
+  .fb.wide .fb-l{height:18px}
   .terms h3{font-family:Georgia,'Times New Roman',serif;font-size:18px;margin:0 0 14px;color:${INK}}
   .term{margin-bottom:16px}
   .term h4{font-size:13.5px;margin:0 0 4px;color:${INK}}
@@ -933,6 +940,7 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
   @media screen and (max-width:560px){
     .intro{font-size:14px;margin-bottom:18px}
     table.facts td.k{width:82px;font-size:10.5px}
+    .facts-blank{grid-template-columns:1fr;row-gap:18px;column-gap:0}
     table.facts td{font-size:14px}
     .term p{font-size:14px}
     .sign input[type=text]{font-size:17px}
@@ -954,7 +962,9 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
     .term h4,.terms h3,.signature h3{break-after:avoid;page-break-after:avoid}
     /* The signature block never sits alone on its own page: it's kept whole and
        pulled up with the last term so both land together. */
-    .keep,.signature,table.facts,.paper-sig .ps-row{break-inside:avoid;page-break-inside:avoid}
+    .keep,.signature,table.facts,.facts-blank,.paper-sig .ps-row{break-inside:avoid;page-break-inside:avoid}
+    .facts-blank{row-gap:20px;margin-bottom:22px;font-size:13px}
+    .fb-l{border-color:#000}
     .signature{margin-top:20px;padding-top:14px}
     .intro{font-size:13px;line-height:1.55;margin-bottom:16px}
     .two-col{margin-bottom:20px}
@@ -995,9 +1005,18 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
       </div>
     </div>
 
-    <table class="facts${blank ? " blank" : ""}">
-      ${rows.map(([k, v]) => `<tr><td class="k">${esc(k)}</td><td${k === "Total" && !blank ? ' class="total"' : ""}>${blank ? "&nbsp;" : esc(v)}</td></tr>`).join("")}
-    </table>
+    ${blank
+      ? `<div class="facts-blank">
+      <div class="fb"><span class="fb-k">Event</span><span class="fb-l"></span></div>
+      <div class="fb"><span class="fb-k">Date</span><span class="fb-l"></span></div>
+      <div class="fb"><span class="fb-k">Time</span><span class="fb-l"></span></div>
+      <div class="fb"><span class="fb-k">Guests</span><span class="fb-l"></span></div>
+      <div class="fb wide"><span class="fb-k">Location</span><span class="fb-l"></span></div>
+      <div class="fb"><span class="fb-k">Total</span><span class="fb-l"></span></div>
+    </div>`
+      : `<table class="facts">
+      ${rows.map(([k, v]) => `<tr><td class="k">${esc(k)}</td><td${k === "Total" ? ' class="total"' : ""}>${esc(v)}</td></tr>`).join("")}
+    </table>`}
 
     <div class="terms">
       <h3>Terms</h3>
