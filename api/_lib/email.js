@@ -1039,10 +1039,11 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
     ${backHref ? `<a class="ghost" href="${esc(backHref)}">‹ Dashboard</a>` : ""}
     <select id="ag-client" aria-label="Fill in from an existing client"><option value="">Fill in from a client…</option>${clients.map((p, i) => `<option value="${i}">${esc([p.name, p.organization].filter(Boolean).join(" · "))}</option>`).join("")}</select>
     <button type="button" class="ghost" id="ag-clear">Clear</button>
-    <button class="print-btn" onclick="window.print()" style="background:${CORAL};color:#fff;border:none;padding:10px 20px;border-radius:22px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">🖨 Print</button>
+    <button type="button" class="print-btn" id="ag-print" style="background:${CORAL};color:#fff;border:none;padding:10px 20px;border-radius:22px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">🖨 Print</button>
     <div class="print-hint">Tap any line to type. For a clean copy, untick "Headers and footers" in the print dialog.</div>
   </div>`
     : `<div class="toolbar"><button onclick="window.print()">🖨 Print</button><div class="print-hint">For a clean copy, untick "Headers and footers" in the print dialog.</div></div>`}
+  ${edit ? `<form id="ag-print-form" method="POST" action="/api/owner" target="_blank"><input type="hidden" name="action" value="quick-agreement"><input type="hidden" name="print" value="1">` : ""}
   <table class="sheet"><tfoot><tr><td><div class="print-foot"><span>${[LEGAL_NAME, "Face Painting California", `Booking Agreement${hasNo ? ` No. ${docNo}` : ""}`, blank ? "" : b.client, blank ? "" : fmtDate(b.date)].filter(Boolean).map(esc).join(" · ")}</span><span>Terms v${esc(blank ? CONTRACT_VERSION : b.contractVersion || CONTRACT_VERSION)}${signed ? " · Signed electronically" : ""}</span></div></td></tr></tfoot><tbody><tr><td>
   <div class="paper">
     <div class="letterhead">
@@ -1104,6 +1105,7 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
     </div>
   </div>
   </td></tr></tbody></table>
+  ${edit ? `</form>` : ""}
   ${edit ? `<script id="ag-data" type="application/json">${JSON.stringify(clients).replace(/</g, "\\u003c")}</script>
   <script>
   (function(){
@@ -1119,6 +1121,10 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
     document.getElementById('ag-clear').addEventListener('click', function(){
       document.querySelectorAll('.wi').forEach(function(el){ el.value = ''; }); sel.value = '';
     });
+    // Print opens the filled-in contract in its own tab (never inside the
+    // dashboard frame), so the browser shows its full print dialog: printer,
+    // copies, and so on.
+    document.getElementById('ag-print').addEventListener('click', function(){ document.getElementById('ag-print-form').submit(); });
     function tagEmpty(){ document.querySelectorAll('.wi').forEach(function(el){ el.classList.toggle('is-empty', !el.value); }); }
     window.addEventListener('beforeprint', tagEmpty); tagEmpty();
     document.addEventListener('input', function(e){ if (e.target.classList && e.target.classList.contains('wi')) e.target.classList.toggle('is-empty', !e.target.value); });
