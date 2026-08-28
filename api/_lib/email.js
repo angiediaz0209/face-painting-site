@@ -613,7 +613,7 @@ export function receiptHtml(b) {
   const receiptNo = (eid.slice(-8) || "000000").toUpperCase();
 
   const billedTo = b.organization
-    ? `<strong>${esc(b.organization)}</strong><br>Attn: ${esc(b.client || "")}`
+    ? `<strong>${esc(b.organization)}</strong><br>${esc(b.client || "")}`
     : `<strong>${esc(b.client || "")}</strong>`;
   const contactLines = [b.email, b.phone].filter(Boolean).map(esc).join("<br>");
 
@@ -811,7 +811,7 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
     : blank
     ? `Name ${line("70%")}<br>Organization ${line("58%")}`
     : b.organization
-    ? `<strong>${esc(b.organization)}</strong><br>Attn: ${esc(b.client || "")}`
+    ? `<strong>${esc(b.organization)}</strong><br>${esc(b.client || "")}`
     : `<strong>${esc(b.client || "")}</strong>`;
   const contactLines = edit
     ? `<label class="wl-row"><span>Phone</span>${wi("clientPhone", "", 'type="tel"')}</label><label class="wl-row"><span>Email</span>${wi("clientEmail", "", 'type="email"')}</label>`
