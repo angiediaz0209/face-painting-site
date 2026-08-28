@@ -69,7 +69,7 @@ function shellPage(title, body, script = "") {
     <meta name="format-detection" content="telephone=no">
     <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2240%22%20fill%3D%22%23E85555%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%2246%22%20fill%3D%22%23fff%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2279%22%20r%3D%227.5%22%20fill%3D%22%23F6A6A6%22%2F%3E%3Ccircle%20cx%3D%22107%22%20cy%3D%2277%22%20r%3D%227.5%22%20fill%3D%22%23D9922B%22%2F%3E%3Ccircle%20cx%3D%22115%22%20cy%3D%22103%22%20r%3D%227.5%22%20fill%3D%22%23B93B3B%22%2F%3E%3Ccircle%20cx%3D%2280%22%20cy%3D%22113%22%20r%3D%227.5%22%20fill%3D%22%232A1B18%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%229%22%20fill%3D%22%23FBF7F3%22%2F%3E%3C%2Fsvg%3E">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2240%22%20fill%3D%22%23E85555%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%2246%22%20fill%3D%22%23fff%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2279%22%20r%3D%227.5%22%20fill%3D%22%23F6A6A6%22%2F%3E%3Ccircle%20cx%3D%22107%22%20cy%3D%2277%22%20r%3D%227.5%22%20fill%3D%22%23D9922B%22%2F%3E%3Ccircle%20cx%3D%22115%22%20cy%3D%22103%22%20r%3D%227.5%22%20fill%3D%22%23B93B3B%22%2F%3E%3Ccircle%20cx%3D%2280%22%20cy%3D%22113%22%20r%3D%227.5%22%20fill%3D%22%232A1B18%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%229%22%20fill%3D%22%23FBF7F3%22%2F%3E%3C%2Fsvg%3E">
-    <link rel="stylesheet" href="/owner-dashboard.css?v=7">
+    <link rel="stylesheet" href="/owner-dashboard.css?v=8">
     <title>${title}</title>`;
   return `<!doctype html><html><head>${head}</head><body>${body}${script}</body></html>`;
 }
@@ -843,7 +843,19 @@ export function agreementPage(clients) {
       location: c.lastLocation || "",
       quote: c.lastQuote ? `$${c.lastQuote}` : "",
     }));
-  return contractHtml({}, { edit: true, clients: people, backHref: navHref("more") });
+  return contractHtml({}, { edit: true, clients: people });
+}
+
+// The dashboard wrapper: side nav + the editable contract in a frame that
+// fills the rest of the screen. The frame is the real document, so Print
+// inside it prints just the contract; "Full screen" is the same document
+// on its own for phones whose print dialog ignores frames.
+export function agreementShellPage() {
+  const content = `
+    <div class="vhead"><div><h1>Agreement</h1><p class="sub">Tap any line on the contract to fill it in, then print</p></div>
+      <a class="btn btn-resched" href="/api/owner?view=agreement-doc" target="_blank" rel="noopener" style="flex-shrink:0">Full screen ↗</a></div>
+    <iframe class="ag-frame" src="/api/owner?view=agreement-doc" title="Booking agreement"></iframe>`;
+  return shellPage("Agreement · Face Painting CA", appShell("more", content), DASHBOARD_SCRIPT);
 }
 
 // Outcomes of a change-password attempt, keyed by the `pw` query param the
@@ -1501,6 +1513,10 @@ export default async function handler(req, res) {
       return html(200, morePage(params.get("pw") || ""));
     }
     if (view === "agreement") {
+      return html(200, agreementShellPage());
+    }
+    if (view === "agreement-doc") {
+      res.setHeader("Cache-Control", "no-store");
       return html(200, agreementPage(await getClients()));
     }
     if (view === "stats") {
