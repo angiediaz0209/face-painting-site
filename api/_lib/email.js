@@ -962,6 +962,11 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
   .fb-k{flex-shrink:0}
   .fb-l{flex:1;border-bottom:1px solid ${INK};height:18px}
   .fb.wide .fb-l{height:18px}
+  /* Filled-in paper copy: same layout, plain values, no lines. */
+  .facts-paper .fb{align-items:baseline}
+  .facts-paper .fb-k{color:${MUTED};font-size:11px;text-transform:uppercase;letter-spacing:.6px;font-weight:700;min-width:64px}
+  .facts-paper .fb-v{font-size:14.5px;color:${INK}}
+  .facts-paper .fb-v.total{font-weight:800;color:${CORAL_RED}}
   .terms h3{font-family:Georgia,'Times New Roman',serif;font-size:18px;margin:0 0 14px;color:${INK}}
   .term{margin-bottom:16px}
   .term h4{font-size:13.5px;margin:0 0 4px;color:${INK}}
@@ -1078,6 +1083,14 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
       <label class="fb"><span class="fb-k">Time</span><span class="fb-time">${wi("startTime", "", 'type="time"')}<span class="dash">–</span>${wi("endTime", "", 'type="time"')}</span></label>
       <label class="fb"><span class="fb-k">Total</span>${wi("quote", "e.g. $300", 'inputmode="decimal"')}</label>
       <label class="fb wide"><span class="fb-k">Location</span>${wi("location", "Address")}</label>
+    </div>`
+      : paper
+      ? `<div class="facts-blank facts-paper">
+      <div class="fb"><span class="fb-k">Event</span><span class="fb-v">${esc(b.eventType || "")}</span></div>
+      <div class="fb"><span class="fb-k">Date</span><span class="fb-v">${esc(fmtDate(b.date) || "")}</span></div>
+      <div class="fb"><span class="fb-k">Time</span><span class="fb-v">${esc(fmtTimeRange(b.time) || "")}</span></div>
+      <div class="fb"><span class="fb-k">Total</span><span class="fb-v total">${esc(b.quote || "")}</span></div>
+      <div class="fb wide"><span class="fb-k">Location</span><span class="fb-v">${esc(b.location || "")}</span></div>
     </div>`
       : blank
       ? `<div class="facts-blank">
