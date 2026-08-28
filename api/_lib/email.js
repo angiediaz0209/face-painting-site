@@ -810,7 +810,10 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
     ? CONTRACT_STATUS.SIGNED
     : CONTRACT_STATUS.UNSIGNED;
   const eid = (b.eventId || "").replace(/[^a-zA-Z0-9]/g, "");
-  const docNo = blank || (paper && !eid) ? "________" : (eid.slice(-8) || "000000").toUpperCase();
+  // Only a booking-backed agreement has a document number; the blank and
+  // fill-in forms have no booking behind them, so the line is left out.
+  const hasNo = !(blank || (paper && !eid));
+  const docNo = hasNo ? (eid.slice(-8) || "000000").toUpperCase() : "";
   const canSign = !blank && !paper && !cancelled && !signed && eventId && token;
 
   // Blank mode: the same document with write-in lines instead of booking data,
@@ -1040,7 +1043,7 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
     <div class="print-hint">Tap any line to type. For a clean copy, untick "Headers and footers" in the print dialog.</div>
   </div>`
     : `<div class="toolbar"><button onclick="window.print()">🖨 Print</button><div class="print-hint">For a clean copy, untick "Headers and footers" in the print dialog.</div></div>`}
-  <table class="sheet"><tfoot><tr><td><div class="print-foot"><span>${esc(LEGAL_NAME)} · Face Painting California · Booking Agreement No. ${esc(docNo)}${blank ? "" : ` · ${esc(b.client || "")}${b.date ? ` · ${esc(fmtDate(b.date))}` : ""}`}</span><span>Terms v${esc(blank ? CONTRACT_VERSION : b.contractVersion || CONTRACT_VERSION)}${signed ? " · Signed electronically" : ""}</span></div></td></tr></tfoot><tbody><tr><td>
+  <table class="sheet"><tfoot><tr><td><div class="print-foot"><span>${[LEGAL_NAME, "Face Painting California", `Booking Agreement${hasNo ? ` No. ${docNo}` : ""}`, blank ? "" : b.client, blank ? "" : fmtDate(b.date)].filter(Boolean).map(esc).join(" · ")}</span><span>Terms v${esc(blank ? CONTRACT_VERSION : b.contractVersion || CONTRACT_VERSION)}${signed ? " · Signed electronically" : ""}</span></div></td></tr></tfoot><tbody><tr><td>
   <div class="paper">
     <div class="letterhead">
       <div>
@@ -1049,8 +1052,8 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
       </div>
       <div class="doc-title">
         <h1>Booking Agreement</h1>
-        <div class="doc-meta">No. ${esc(docNo)}<br>Terms v${esc(CONTRACT_VERSION)}</div>
-        <div class="status" style="background:${s.color}">${esc(s.label)}</div>
+        <div class="doc-meta">${hasNo ? `No. ${esc(docNo)}<br>` : ""}Terms v${esc(CONTRACT_VERSION)}</div>
+        ${blank || paper ? "" : `<div class="status" style="background:${s.color}">${esc(s.label)}</div>`}
       </div>
     </div>
 
