@@ -69,7 +69,7 @@ function shellPage(title, body, script = "") {
     <meta name="format-detection" content="telephone=no">
     <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2240%22%20fill%3D%22%23E85555%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%2246%22%20fill%3D%22%23fff%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2279%22%20r%3D%227.5%22%20fill%3D%22%23F6A6A6%22%2F%3E%3Ccircle%20cx%3D%22107%22%20cy%3D%2277%22%20r%3D%227.5%22%20fill%3D%22%23D9922B%22%2F%3E%3Ccircle%20cx%3D%22115%22%20cy%3D%22103%22%20r%3D%227.5%22%20fill%3D%22%23B93B3B%22%2F%3E%3Ccircle%20cx%3D%2280%22%20cy%3D%22113%22%20r%3D%227.5%22%20fill%3D%22%232A1B18%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%229%22%20fill%3D%22%23FBF7F3%22%2F%3E%3C%2Fsvg%3E">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2240%22%20fill%3D%22%23E85555%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%2246%22%20fill%3D%22%23fff%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2279%22%20r%3D%227.5%22%20fill%3D%22%23F6A6A6%22%2F%3E%3Ccircle%20cx%3D%22107%22%20cy%3D%2277%22%20r%3D%227.5%22%20fill%3D%22%23D9922B%22%2F%3E%3Ccircle%20cx%3D%22115%22%20cy%3D%22103%22%20r%3D%227.5%22%20fill%3D%22%23B93B3B%22%2F%3E%3Ccircle%20cx%3D%2280%22%20cy%3D%22113%22%20r%3D%227.5%22%20fill%3D%22%232A1B18%22%2F%3E%3Ccircle%20cx%3D%2290%22%20cy%3D%2295%22%20r%3D%229%22%20fill%3D%22%23FBF7F3%22%2F%3E%3C%2Fsvg%3E">
-    <link rel="stylesheet" href="/owner-dashboard.css?v=6">
+    <link rel="stylesheet" href="/owner-dashboard.css?v=7">
     <title>${title}</title>`;
   return `<!doctype html><html><head>${head}</head><body>${body}${script}</body></html>`;
 }
@@ -854,28 +854,24 @@ export function agreementPage(clients) {
     })
     .join("");
   // The client list rides along as JSON so the picker can prefill without a
-  // round trip. </ is escaped so a name can't close the script tag.
+  // round trip. < is escaped so a name can't close the script tag.
   const data = JSON.stringify(people).replace(/</g, "\\u003c");
 
   const content = `
-    <div class="vhead"><div><h1>Agreement</h1><p class="sub">Print a booking agreement to sign on paper</p></div></div>
-    <div class="cardgrid">
-      <div class="card fullrow">
-        <div class="cname" style="font-size:16px">Who is it for?</div>
-        <p class="crmeta" style="margin-top:4px">Pick an existing client to fill in their details, or leave it on "New client" and type them below.</p>
-        <select id="ag-client" class="bin" style="margin-top:10px;width:100%;padding:11px 12px;border:1px solid #E9DFD5;border-radius:10px;font-size:16px;background:#FBF7F3;font-family:inherit;color:#211A19">
+    <div class="vhead"><div><h1>Agreement</h1><p class="sub">Fill in the details and print a contract to sign on paper</p></div></div>
+    <div class="ag-wrap">
+      <div class="card ag-side">
+        <select id="ag-client" class="bin ag-pick" aria-label="Existing client">
           <option value="">New client</option>
           ${options}
         </select>
         ${people.length ? "" : `<p class="crmeta" style="margin-top:8px">No clients on file yet — add them on the Clients tab and they'll show up here.</p>`}
 
-        <form id="ag-form" method="POST" action="/api/owner" target="_blank" class="bform" style="margin-top:14px" autocomplete="off">
+        <form id="ag-form" method="POST" action="/api/owner" target="ag-preview" class="bform" style="margin-top:12px" autocomplete="off">
           <input type="hidden" name="action" value="quick-agreement">
-          <div class="sec" style="margin:4px 0 0">Client</div>
-          <div class="form-row">
-            <input class="bin" type="text" name="clientName" placeholder="Client name *" required>
-            <input class="bin" type="text" name="organization" placeholder="Organization (optional)">
-          </div>
+          <div class="sec" style="margin:2px 0 0">Client</div>
+          <input class="bin" type="text" name="clientName" placeholder="Client name">
+          <input class="bin" type="text" name="organization" placeholder="Organization (optional)">
           <div class="form-row">
             <input class="bin" type="tel" name="clientPhone" placeholder="Phone">
             <input class="bin" type="email" name="clientEmail" placeholder="Email">
@@ -885,48 +881,49 @@ export function agreementPage(clients) {
             <input class="bin" type="text" name="eventType" placeholder="Event (e.g. Birthday party)">
             <input class="bin" type="text" name="guestCount" placeholder="Guests">
           </div>
+          <input type="date" name="date" class="bin" aria-label="Date">
           <div class="form-row">
-            <input type="date" name="date" required>
-            <input type="time" name="startTime" required>
-            <input type="time" name="endTime">
+            <input type="time" name="startTime" aria-label="Start time">
+            <input type="time" name="endTime" aria-label="End time">
           </div>
           <input class="bin" type="text" name="location" placeholder="Location / address">
           <input class="bin" type="text" name="quote" placeholder="Total (e.g. $300)" inputmode="decimal">
           <div class="cactions" style="margin-top:6px">
-            <button class="btn btn-add" type="submit" name="print" value="1">🖨 Print agreement</button>
-            <button class="btn btn-resched" type="submit">Preview</button>
-            <button class="btn btn-resched" type="reset" id="ag-clear">Clear</button>
+            <button class="btn btn-add" type="button" id="ag-print">🖨 Print</button>
+            <button class="btn btn-resched" type="submit" formtarget="_blank">Open in new tab</button>
+            <button class="btn btn-resched" type="button" id="ag-clear">Clear</button>
           </div>
-          <p class="crmeta">Opens in a new tab. Nothing is saved to the calendar — for a real booking, use Add event on Bookings and print the agreement from there.</p>
+          <p class="crmeta">The preview updates as you type. Leave everything empty for the blank form. Nothing is saved to the calendar.</p>
         </form>
       </div>
-
-      <div class="card fullrow">
-        <div style="display:flex;align-items:center;gap:13px;min-width:0">
-          <span style="display:flex;color:#B93B3B;flex-shrink:0">${icon("doc")}</span>
-          <div style="min-width:0">
-            <div class="cname" style="font-size:16px">Blank form</div>
-            <div class="crmeta">An unfilled copy with write-in lines, for filling out by hand.</div>
-          </div>
-        </div>
-        <div class="cactions" style="margin-top:12px">
-          <a class="btn btn-add" href="/api/status?action=contract-blank&print=1" target="_blank" rel="noopener">🖨 Print blank</a>
-          <a class="btn btn-resched" href="/api/status?action=contract-blank" target="_blank" rel="noopener">Preview</a>
-        </div>
+      <div class="ag-paper">
+        <iframe name="ag-preview" id="ag-preview" class="ag-frame" title="Agreement preview" src="/api/status?action=contract-blank"></iframe>
       </div>
     </div>
     <script id="ag-data" type="application/json">${data}</script>
     <script>
     (function(){
       var people = JSON.parse(document.getElementById('ag-data').textContent || '[]');
-      var sel = document.getElementById('ag-client'), form = document.getElementById('ag-form');
+      var sel = document.getElementById('ag-client'), form = document.getElementById('ag-form'), frame = document.getElementById('ag-preview');
       var map = { clientName:'name', organization:'organization', clientPhone:'phone', clientEmail:'email', eventType:'eventType', location:'location', quote:'quote' };
+      var timer;
+      // Re-render the preview by posting the form into the iframe (no page reload).
+      function refresh(){ clearTimeout(timer); timer = setTimeout(function(){ form.submit(); }, 400); }
       function fill(p){
         for (var field in map) { var el = form.elements[field]; if (el) el.value = p ? (p[map[field]] || '') : ''; }
-        if (p) { var d = form.elements.date; if (d && !d.value) d.focus(); }
+        refresh();
       }
       sel.addEventListener('change', function(){ fill(sel.value === '' ? null : people[+sel.value]); });
-      document.getElementById('ag-clear').addEventListener('click', function(){ sel.value = ''; });
+      form.addEventListener('input', refresh);
+      form.addEventListener('change', refresh);
+      document.getElementById('ag-clear').addEventListener('click', function(){ form.reset(); sel.value = ''; refresh(); });
+      // Print what's in the preview. Same origin, so the iframe's own print
+      // stylesheet applies; falls back to a new tab if the browser blocks it.
+      document.getElementById('ag-print').addEventListener('click', function(){
+        clearTimeout(timer);
+        try { frame.contentWindow.focus(); frame.contentWindow.print(); }
+        catch (e) { var t = form.target; form.target = '_blank'; form.submit(); form.target = t; }
+      });
     })();
     </script>`;
   return shellPage("Agreement · Face Painting CA", appShell("more", content), DASHBOARD_SCRIPT);
@@ -1528,8 +1525,9 @@ export default async function handler(req, res) {
           location: t(body.location, 300),
           quote: quote && /^\d/.test(quote) ? `${quote}` : quote,
         };
+        const empty = !Object.values(b).some(Boolean);
         res.setHeader("Cache-Control", "no-store");
-        return html(200, contractHtml(b, { paper: true, autoPrint: body.print === "1" }));
+        return html(200, contractHtml(empty ? {} : b, { paper: !empty, blank: empty, autoPrint: body.print === "1" }));
       }
 
       const proto = req.headers["x-forwarded-proto"] || (String(req.headers.host || "").includes("localhost") ? "http" : "https");
