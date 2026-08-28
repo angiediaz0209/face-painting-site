@@ -1,5 +1,5 @@
 import { getBooking, updateBookingLocation, signContract } from "./_lib/book.js";
-import { clientStatusHtml, receiptHtml, contractHtml, contractSignedCopyHtml, fmtSignedAt, sendEmail } from "./_lib/email.js";
+import { clientStatusHtml, receiptHtml, contractHtml, contractSignedCopyHtml, withInlineSignature, fmtSignedAt, sendEmail } from "./_lib/email.js";
 import { setClientFlag } from "./_lib/clients.js";
 import { clientToken, optoutToken, verifyToken } from "./_lib/tokens.js";
 import { syncBookingsToSheet } from "./_lib/sheets.js";
@@ -269,11 +269,11 @@ export default async function handler(req, res) {
   // above — a client token that can view the status page can also see these
   // two documents for the same booking, nothing more.
   const action = url.searchParams.get("action");
-  const render = (booking) =>
+  const render = async (booking) =>
     action === "receipt"
       ? receiptHtml(booking)
       : action === "contract"
-      ? contractHtml(booking, { eventId, token })
+      ? contractHtml(await withInlineSignature(booking), { eventId, token })
       : clientStatusHtml(booking, { eventId, token });
 
   try {
@@ -281,13 +281,13 @@ export default async function handler(req, res) {
     if (!booking) {
       // Event was deleted/declined — treat as cancelled so the client still gets
       // a clear answer instead of an error.
-      return send(200, render({ status: "CANCELLED" }));
+      return send(200, await render({ status: "CANCELLED" }));
     }
-    return send(200, render(booking));
+    return send(200, await render(booking));
   } catch (error) {
     // events.get 404s once a pending booking is declined (deleted).
     if (error?.code === 404 || error?.response?.status === 404) {
-      return send(200, render({ status: "CANCELLED" }));
+      return send(200, await render({ status: "CANCELLED" }));
     }
     console.error("Status error:", error);
     return send(

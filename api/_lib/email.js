@@ -566,7 +566,7 @@ function paperCss() {
   .total-row td{border-bottom:none;padding-top:16px;font-weight:800;font-size:17px}
   .total-row .amt{color:${CORAL_RED}}
   .footnote{font-size:12.5px;color:${MUTED};margin-top:22px;line-height:1.7;border-top:1px solid ${LINE};padding-top:16px}
-  @media (max-width:560px){
+  @media screen and (max-width:560px){
     body{padding:14px 10px}
     .toolbar{margin-bottom:10px}
     .paper{padding:26px 18px;border-radius:8px}
@@ -578,10 +578,24 @@ function paperCss() {
     .col p{font-size:14px}
     table.items td{font-size:14px;padding:12px 0}
   }
+  .print-hint{font-size:12px;color:${MUTED};margin-top:6px}
+  table.sheet{width:100%;border-collapse:collapse}
+  table.sheet td{padding:0;border:0;vertical-align:top}
+  table.sheet tfoot{display:none}
   @media print{
-    body{background:#fff;padding:0}
+    @page{margin:0.6in}
+    body{background:#fff;padding:0;color:#000}
     .toolbar{display:none}
     .paper{box-shadow:none;border:none;margin:0;max-width:none;padding:0}
+    /* Grey that reads fine on a screen comes out faint on an inkjet. */
+    .brand-meta,.col p,table.items td,.footnote{color:#000}
+    .doc-meta,.col h3,table.items th{color:#444}
+    .letterhead,.two-col,table.items,.footnote{break-inside:avoid;page-break-inside:avoid}
+    /* Repeats at the foot of every page (position:fixed prints per page), so a
+       loose sheet can always be matched back to its booking. */
+    table.sheet tfoot{display:table-footer-group}
+    .print-foot{display:flex;justify-content:space-between;gap:16px;margin-top:22px;padding-top:8px;border-top:1px solid #ddd;font-size:10px;color:#555;letter-spacing:.2px}
+    .print-foot span:last-child{white-space:nowrap}
   }
 `;
 }
@@ -611,7 +625,8 @@ export function receiptHtml(b) {
 <title>Receipt — Face Painting California</title>
 <style>${paperCss()}</style></head>
 <body>
-  <div class="toolbar"><button onclick="window.print()">🖨 Print</button></div>
+  <div class="toolbar"><button onclick="window.print()">🖨 Print</button><div class="print-hint">For a clean copy, untick "Headers and footers" in the print dialog.</div></div>
+  <table class="sheet"><tfoot><tr><td><div class="print-foot"><span>Face Painting California · Receipt No. ${esc(receiptNo)} · ${esc(b.client || "")}</span><span>Issued ${esc(receiptTodayPacific())}</span></div></td></tr></tfoot><tbody><tr><td>
   <div class="paper">
     <div class="letterhead">
       <div>
@@ -646,6 +661,7 @@ export function receiptHtml(b) {
 
     <div class="footnote">${esc(s.note)}</div>
   </div>
+  </td></tr></tbody></table>
 </body></html>`;
 }
 
@@ -727,6 +743,32 @@ export function fmtSignedAt(iso) {
 }
 
 /**
+ * Inlines the client's drawn signature as a data URI on the booking (as
+ * `contractSignatureDataUrl`) so a printed copy never shows a broken image if
+ * the Blob URL is slow or unreachable at print time. Best effort: on any
+ * failure the page falls back to the remote URL. Small and bounded (signature
+ * PNGs are a few KB; anything over 400 KB is left as a link).
+ */
+export async function withInlineSignature(b) {
+  const url = b?.contractSignatureUrl;
+  if (!url || b.contractSignatureDataUrl) return b;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 2500);
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (!res.ok) return b;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length === 0 || buf.length > 400_000) return b;
+    const type = res.headers.get("content-type") || "image/png";
+    return { ...b, contractSignatureDataUrl: `data:${type};base64,${buf.toString("base64")}` };
+  } catch (e) {
+    console.warn("Signature inline skipped:", e?.message || e);
+    return b;
+  }
+}
+
+/**
  * The booking agreement page. `b` is a normalized booking; pass `eventId` +
  * `token` (the same client HMAC that gated the page) to render the sign form.
  * `error` is a short message shown above the form after a failed submit.
@@ -769,9 +811,11 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
         ["Total", b.quote],
       ].filter(([, v]) => v);
 
-  const termsHtml = CONTRACT_TERMS.map(
-    ([h, p], i) => `<div class="term"><h4>${i + 1}. ${esc(h)}</h4><p>${esc(p)}</p></div>`
-  ).join("");
+  const termHtml = ([h, p], i) => `<div class="term"><h4>${i + 1}. ${esc(h)}</h4><p>${esc(p)}</p></div>`;
+  // The final term is rendered inside the signature wrapper (see below) so
+  // print keeps it on the same page as the signature block.
+  const termsHtml = CONTRACT_TERMS.slice(0, -1).map(termHtml).join("");
+  const lastTermHtml = termHtml(CONTRACT_TERMS[CONTRACT_TERMS.length - 1], CONTRACT_TERMS.length - 1);
 
   let signatureBlock;
   if (blank) {
@@ -787,7 +831,7 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
   } else if (signed) {
     signatureBlock = `
       <div class="signed">
-        ${b.contractSignatureUrl ? `<div class="sig-row"><span class="sig-k">Signature</span><span class="sig-v"><img class="sig-img" src="${esc(b.contractSignatureUrl)}" alt="Signature of ${esc(b.contractSignedName || b.client || "client")}"></span></div>` : ""}
+        ${b.contractSignatureUrl ? `<div class="sig-row"><span class="sig-k">Signature</span><span class="sig-v"><img class="sig-img" src="${esc(b.contractSignatureDataUrl || b.contractSignatureUrl)}" alt="Signature of ${esc(b.contractSignedName || b.client || "client")}"></span></div>` : ""}
         <div class="sig-row"><span class="sig-k">${b.contractSignatureUrl ? "Name" : "Signed by"}</span><span class="sig-v sig-name">${esc(b.contractSignedName || b.client || "")}</span></div>
         <div class="sig-row"><span class="sig-k">On</span><span class="sig-v">${esc(fmtSignedAt(b.contractSignedAt))}</span></div>
         <div class="sig-row"><span class="sig-k">For</span><span class="sig-v">Face Painting California</span></div>
@@ -886,7 +930,7 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
   .paper-sig .ps-cell.wide{flex:2.4}
   .paper-sig .ps-line{border-bottom:1px solid ${INK};height:26px}
   .paper-sig .ps-cap{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:${MUTED};font-weight:700;margin-top:6px}
-  @media (max-width:560px){
+  @media screen and (max-width:560px){
     .intro{font-size:14px;margin-bottom:18px}
     table.facts td.k{width:82px;font-size:10.5px}
     table.facts td{font-size:14px}
@@ -901,10 +945,30 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
     .paper-sig .ps-cell.wide{flex:1.8}
     .wl{min-width:90px}
   }
-  @media print{ .sign button{display:none} .sig-note{color:${BODY}} .sig-img{max-width:280px} }
+  @media print{
+    .sign button{display:none}
+    .sig-img{max-width:280px}
+    .intro,table.facts td,.term h4,.signed .sig-row,.sig-name,.wl{color:#000}
+    .term p,.sig-note,.paper-sig .ps-cap,table.facts td.k,.sig-k{color:#222}
+    .term{break-inside:avoid;page-break-inside:avoid}
+    .term h4,.terms h3,.signature h3{break-after:avoid;page-break-after:avoid}
+    /* The signature block never sits alone on its own page: it's kept whole and
+       pulled up with the last term so both land together. */
+    .keep,.signature,table.facts,.paper-sig .ps-row{break-inside:avoid;page-break-inside:avoid}
+    .signature{margin-top:20px;padding-top:14px}
+    .intro{font-size:13px;line-height:1.55;margin-bottom:16px}
+    .two-col{margin-bottom:20px}
+    table.facts{margin-bottom:20px}
+    table.facts td{padding:7px 0;font-size:13px}
+    .term{margin-bottom:10px}
+    .term h4{font-size:12.5px;margin-bottom:2px}
+    .term p{font-size:12.5px;line-height:1.5}
+    .terms h3{margin-bottom:8px}
+  }
 </style></head>
 <body>
-  <div class="toolbar"><button onclick="window.print()">🖨 Print</button></div>
+  <div class="toolbar"><button onclick="window.print()">🖨 Print</button><div class="print-hint">For a clean copy, untick "Headers and footers" in the print dialog.</div></div>
+  <table class="sheet"><tfoot><tr><td><div class="print-foot"><span>Face Painting California · Booking Agreement No. ${esc(docNo)}${blank ? "" : ` · ${esc(b.client || "")}${b.date ? ` · ${esc(fmtDate(b.date))}` : ""}`}</span><span>Terms v${esc(blank ? CONTRACT_VERSION : b.contractVersion || CONTRACT_VERSION)}${signed ? " · Signed electronically" : ""}</span></div></td></tr></tfoot><tbody><tr><td>
   <div class="paper">
     <div class="letterhead">
       <div>
@@ -940,11 +1004,15 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, aut
       ${termsHtml}
     </div>
 
-    <div class="signature">
-      <h3>${signed ? "Signature" : blank ? "Signatures" : "Sign here"}</h3>
-      ${signatureBlock}
+    <div class="keep">
+      <div class="terms">${lastTermHtml}</div>
+      <div class="signature">
+        <h3>${signed ? "Signature" : blank ? "Signatures" : "Sign here"}</h3>
+        ${signatureBlock}
+      </div>
     </div>
   </div>
+  </td></tr></tbody></table>
   ${autoPrint ? `<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},250)})</script>` : ""}
 </body></html>`;
 }
