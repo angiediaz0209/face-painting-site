@@ -782,7 +782,10 @@ export async function withInlineSignature(b) {
  * (the dashboard's quick agreement: details typed by the owner, no booking
  * on the calendar behind it, so nothing to sign online).
  */
-export function contractHtml(b, { eventId, token, error = "", blank = false, paper = false, autoPrint = false } = {}) {
+export function contractHtml(b, { eventId, token, error = "", blank = false, paper = false, edit = false, clients = [], backHref = "", autoPrint = false } = {}) {
+  // Edit mode is the blank form with live inputs; on paper it's the same
+  // "sign on paper" contract as a filled-in one, so it borrows paper's status.
+  if (edit) { blank = false; paper = true; }
   const status = (b.status || "PENDING").toUpperCase();
   const cancelled = !blank && !paper && status === "CANCELLED";
   const signed = !blank && !paper && !!b.contractSignedAt;
@@ -802,16 +805,21 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
   // Blank mode: the same document with write-in lines instead of booking data,
   // for signing on paper (at the event, or for a school that wants a hard copy).
   const line = (w = "100%") => `<span class="wl" style="width:${w}"></span>`;
-  const clientBlock = blank
+  const wi = (name, placeholder, extra = "") => `<input class="wi" name="${name}" placeholder="${placeholder}" autocomplete="off" ${extra}>`;
+  const clientBlock = edit
+    ? `<label class="wl-row"><span>Name</span>${wi("clientName", "Client name")}</label><label class="wl-row"><span>Organization</span>${wi("organization", "optional")}</label>`
+    : blank
     ? `Name ${line("70%")}<br>Organization ${line("58%")}`
     : b.organization
     ? `<strong>${esc(b.organization)}</strong><br>Attn: ${esc(b.client || "")}`
     : `<strong>${esc(b.client || "")}</strong>`;
-  const contactLines = blank
+  const contactLines = edit
+    ? `<label class="wl-row"><span>Phone</span>${wi("clientPhone", "", 'type="tel"')}</label><label class="wl-row"><span>Email</span>${wi("clientEmail", "", 'type="email"')}</label>`
+    : blank
     ? `Phone ${line("72%")}<br>Email ${line("74%")}`
     : [b.email, b.phone].filter(Boolean).map(esc).join("<br>");
 
-  const rows = blank
+  const rows = blank || edit
     ? []
     : [
         ["Event", [b.eventType, b.occasion].filter(Boolean).join(" — ")],
@@ -904,8 +912,30 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
   }
 
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Booking Agreement — Face Painting California</title>
+<title>${edit ? "Fill in an agreement" : "Booking Agreement"} — Face Painting California</title>
 <style>${paperCss()}
+  /* Edit mode: write-in lines that you can type on. */
+  .wi{font:inherit;font-size:14.5px;color:${INK};background:#fffdf7;border:0;border-bottom:1px solid ${INK};border-radius:0;padding:2px 4px;min-width:0;width:100%;outline:none}
+  .wi:focus{background:#fff4ec;box-shadow:0 2px 0 ${CORAL}}
+  .wi::placeholder{color:#b8b0a6;font-style:italic}
+  .wl-row{display:flex;align-items:baseline;gap:8px;margin:0 0 7px;font-size:14.5px;color:${INK}}
+  .wl-row span{flex-shrink:0}
+  .fb-time{flex:1;display:flex;align-items:baseline;gap:6px}
+  .fb-time .dash{color:${MUTED}}
+  .fb .wi{flex:1}
+  .edit-bar{max-width:640px;margin:0 auto 14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .edit-bar select{flex:1;min-width:200px;font:inherit;font-size:15px;padding:10px 12px;border:1px solid ${LINE};border-radius:12px;background:#fff;color:${INK}}
+  .edit-bar .ghost{background:#fff;color:${BODY};border:1px solid ${LINE};padding:10px 16px;border-radius:22px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;text-decoration:none}
+  .edit-bar .print-hint{flex-basis:100%;margin:0}
+  .wi::-webkit-calendar-picker-indicator{opacity:.5}
+  @media print{
+    .wi{background:none;box-shadow:none;color:#000;border-bottom-color:#000}
+    .wi::placeholder{color:transparent}
+    .wi::-webkit-calendar-picker-indicator{display:none}
+    /* Empty date/time pickers would print their "mm/dd/yyyy" hint; beforeprint tags them. */
+    .wi.is-empty{color:transparent}
+    .edit-bar{display:none}
+  }
   .intro{font-size:14.5px;line-height:1.7;color:${INK};margin:0 0 22px}
   table.facts{width:100%;border-collapse:collapse;margin-bottom:28px}
   table.facts td{padding:9px 0;border-bottom:1px solid ${LINE};font-size:14.5px;color:${INK};vertical-align:top}
@@ -991,7 +1021,15 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
   }
 </style></head>
 <body>
-  <div class="toolbar"><button onclick="window.print()">🖨 Print</button><div class="print-hint">For a clean copy, untick "Headers and footers" in the print dialog.</div></div>
+  ${edit
+    ? `<div class="edit-bar">
+    ${backHref ? `<a class="ghost" href="${esc(backHref)}">‹ Dashboard</a>` : ""}
+    <select id="ag-client" aria-label="Fill in from an existing client"><option value="">Fill in from a client…</option>${clients.map((p, i) => `<option value="${i}">${esc([p.name, p.organization].filter(Boolean).join(" · "))}</option>`).join("")}</select>
+    <button type="button" class="ghost" id="ag-clear">Clear</button>
+    <button class="print-btn" onclick="window.print()" style="background:${CORAL};color:#fff;border:none;padding:10px 20px;border-radius:22px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">🖨 Print</button>
+    <div class="print-hint">Tap any line to type. For a clean copy, untick "Headers and footers" in the print dialog.</div>
+  </div>`
+    : `<div class="toolbar"><button onclick="window.print()">🖨 Print</button><div class="print-hint">For a clean copy, untick "Headers and footers" in the print dialog.</div></div>`}
   <table class="sheet"><tfoot><tr><td><div class="print-foot"><span>${esc(LEGAL_NAME)} · Face Painting California · Booking Agreement No. ${esc(docNo)}${blank ? "" : ` · ${esc(b.client || "")}${b.date ? ` · ${esc(fmtDate(b.date))}` : ""}`}</span><span>Terms v${esc(blank ? CONTRACT_VERSION : b.contractVersion || CONTRACT_VERSION)}${signed ? " · Signed electronically" : ""}</span></div></td></tr></tfoot><tbody><tr><td>
   <div class="paper">
     <div class="letterhead">
@@ -1011,7 +1049,7 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
     <div class="two-col">
       <div class="col">
         <h3>Client</h3>
-        <p>${clientBlock}${contactLines ? `<br>${contactLines}` : ""}</p>
+        <p>${clientBlock}${contactLines ? `${edit ? "" : "<br>"}${contactLines}` : ""}</p>
       </div>
       <div class="col">
         <h3>Provider</h3>
@@ -1019,7 +1057,16 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
       </div>
     </div>
 
-    ${blank
+    ${edit
+      ? `<div class="facts-blank">
+      <label class="fb"><span class="fb-k">Event</span>${wi("eventType", "e.g. Birthday party")}</label>
+      <label class="fb"><span class="fb-k">Date</span>${wi("date", "", 'type="date"')}</label>
+      <label class="fb"><span class="fb-k">Time</span><span class="fb-time">${wi("startTime", "", 'type="time"')}<span class="dash">–</span>${wi("endTime", "", 'type="time"')}</span></label>
+      <label class="fb"><span class="fb-k">Guests</span>${wi("guestCount", "e.g. 15 kids")}</label>
+      <label class="fb wide"><span class="fb-k">Location</span>${wi("location", "Address")}</label>
+      <label class="fb"><span class="fb-k">Total</span>${wi("quote", "e.g. $300", 'inputmode="decimal"')}</label>
+    </div>`
+      : blank
       ? `<div class="facts-blank">
       <div class="fb"><span class="fb-k">Event</span><span class="fb-l"></span></div>
       <div class="fb"><span class="fb-k">Date</span><span class="fb-l"></span></div>
@@ -1046,6 +1093,26 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
     </div>
   </div>
   </td></tr></tbody></table>
+  ${edit ? `<script id="ag-data" type="application/json">${JSON.stringify(clients).replace(/</g, "\\u003c")}</script>
+  <script>
+  (function(){
+    var people = JSON.parse(document.getElementById('ag-data').textContent || '[]');
+    var sel = document.getElementById('ag-client');
+    var map = { clientName:'name', organization:'organization', clientPhone:'phone', clientEmail:'email', eventType:'eventType', location:'location', quote:'quote' };
+    function byName(n){ return document.querySelector('.wi[name="' + n + '"]'); }
+    sel.addEventListener('change', function(){
+      var p = sel.value === '' ? null : people[+sel.value];
+      for (var f in map) { var el = byName(f); if (el) el.value = p ? (p[map[f]] || '') : ''; }
+      var d = byName('date'); if (p && d && !d.value) d.focus();
+    });
+    document.getElementById('ag-clear').addEventListener('click', function(){
+      document.querySelectorAll('.wi').forEach(function(el){ el.value = ''; }); sel.value = '';
+    });
+    function tagEmpty(){ document.querySelectorAll('.wi').forEach(function(el){ el.classList.toggle('is-empty', !el.value); }); }
+    window.addEventListener('beforeprint', tagEmpty); tagEmpty();
+    document.addEventListener('input', function(e){ if (e.target.classList && e.target.classList.contains('wi')) e.target.classList.toggle('is-empty', !e.target.value); });
+  })();
+  </script>` : ""}
   ${autoPrint ? `<script>window.addEventListener("load",function(){setTimeout(function(){window.print()},250)})</script>` : ""}
 </body></html>`;
 }
