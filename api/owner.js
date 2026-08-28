@@ -14,7 +14,7 @@ import {
   addGalleryImage,
   removeGalleryImage,
 } from "./_lib/sheets.js";
-import { fmtTimeRange, fmtSignedAt, birthdayPromoHtml, agreementRequestHtml, contractHtml, sendEmail } from "./_lib/email.js";
+import { fmtTimeRange, fmtSignedAt, fmtPhone, birthdayPromoHtml, agreementRequestHtml, contractHtml, sendEmail } from "./_lib/email.js";
 import {
   getClients,
   upsertClient,
@@ -837,7 +837,7 @@ export function agreementPage(clients) {
     .map((c) => ({
       name: c.name || "",
       organization: c.organization || "",
-      phone: c.phone || "",
+      phone: fmtPhone(c.phone),
       email: c.email || "",
       eventType: c.lastEventType || "",
       location: c.lastLocation || "",
@@ -1433,7 +1433,7 @@ export default async function handler(req, res) {
         const b = {
           client: t(body.clientName, 120),
           organization: t(body.organization, 120),
-          phone: t(body.clientPhone, 40),
+          phone: fmtPhone(t(body.clientPhone, 40)),
           email: t(body.clientEmail, 120),
           eventType: t(body.eventType, 120),
           guests: t(body.guestCount, 40),

@@ -70,6 +70,17 @@ function to12h(hhmm) {
 }
 
 // "14:00 - 16:00" -> "2:00 PM – 4:00 PM"
+// "4155551234", "415-555-1234", "+1 (415) 555 1234" -> "(415) 555-1234", the
+// same style as the business number on the letterhead. Anything that isn't a
+// 10-digit US number is left exactly as typed.
+export function fmtPhone(p) {
+  const raw = String(p || "").trim();
+  let d = raw.replace(/\D/g, "");
+  if (d.length === 11 && d[0] === "1") d = d.slice(1);
+  if (d.length !== 10) return raw;
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+}
+
 export function fmtTimeRange(time) {
   if (!time) return "";
   const parts = time.split(/\s*[-–]\s*/);
@@ -615,7 +626,7 @@ export function receiptHtml(b) {
   const billedTo = b.organization
     ? `<strong>${esc(b.organization)}</strong><br>${esc(b.client || "")}`
     : `<strong>${esc(b.client || "")}</strong>`;
-  const contactLines = [b.email, b.phone].filter(Boolean).map(esc).join("<br>");
+  const contactLines = [b.email, fmtPhone(b.phone)].filter(Boolean).map(esc).join("<br>");
 
   const eventLine = [b.eventType, b.occasion].filter(Boolean).join(" — ");
   const whenLine = [fmtDate(b.date), fmtTimeRange(b.time)].filter(Boolean).join(", ");
@@ -817,7 +828,7 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
     ? `<label class="wl-row"><span>Phone</span>${wi("clientPhone", "", 'type="tel"')}</label><label class="wl-row"><span>Email</span>${wi("clientEmail", "", 'type="email"')}</label>`
     : blank
     ? `Phone ${line("72%")}<br>Email ${line("74%")}`
-    : [b.email, b.phone].filter(Boolean).map(esc).join("<br>");
+    : [b.email, fmtPhone(b.phone)].filter(Boolean).map(esc).join("<br>");
 
   const rows = blank || edit
     ? []
