@@ -852,6 +852,7 @@ export function agreementPage(clients) {
 // on its own for phones whose print dialog ignores frames.
 export function agreementShellPage() {
   const content = `
+    ${backToMore()}
     <div class="vhead"><div><h1>Agreement</h1><p class="sub">Tap any line on the contract to fill it in, then print</p></div>
       <a class="btn btn-resched" href="/api/owner?view=agreement-doc" target="_blank" rel="noopener" style="flex-shrink:0">Full screen ↗</a></div>
     <iframe class="ag-frame" src="/api/owner?view=agreement-doc" title="Booking agreement"></iframe>`;
