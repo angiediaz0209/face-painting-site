@@ -837,7 +837,6 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
         ["Date", fmtDate(b.date)],
         ["Time", fmtTimeRange(b.time)],
         ["Location", b.location || "To be confirmed — send it from your booking page"],
-        ["Guests", b.guests],
         ["Total", b.quote],
       ].filter(([, v]) => v);
 
@@ -1073,18 +1072,16 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
       <label class="fb"><span class="fb-k">Event</span>${wi("eventType", "e.g. Birthday party")}</label>
       <label class="fb"><span class="fb-k">Date</span>${wi("date", "", 'type="date"')}</label>
       <label class="fb"><span class="fb-k">Time</span><span class="fb-time">${wi("startTime", "", 'type="time"')}<span class="dash">–</span>${wi("endTime", "", 'type="time"')}</span></label>
-      <label class="fb"><span class="fb-k">Guests</span>${wi("guestCount", "e.g. 15 kids")}</label>
-      <label class="fb wide"><span class="fb-k">Location</span>${wi("location", "Address")}</label>
       <label class="fb"><span class="fb-k">Total</span>${wi("quote", "e.g. $300", 'inputmode="decimal"')}</label>
+      <label class="fb wide"><span class="fb-k">Location</span>${wi("location", "Address")}</label>
     </div>`
       : blank
       ? `<div class="facts-blank">
       <div class="fb"><span class="fb-k">Event</span><span class="fb-l"></span></div>
       <div class="fb"><span class="fb-k">Date</span><span class="fb-l"></span></div>
       <div class="fb"><span class="fb-k">Time</span><span class="fb-l"></span></div>
-      <div class="fb"><span class="fb-k">Guests</span><span class="fb-l"></span></div>
-      <div class="fb wide"><span class="fb-k">Location</span><span class="fb-l"></span></div>
       <div class="fb"><span class="fb-k">Total</span><span class="fb-l"></span></div>
+      <div class="fb wide"><span class="fb-k">Location</span><span class="fb-l"></span></div>
     </div>`
       : `<table class="facts">
       ${rows.map(([k, v]) => `<tr><td class="k">${esc(k)}</td><td${k === "Total" ? ' class="total"' : ""}>${esc(v)}</td></tr>`).join("")}
