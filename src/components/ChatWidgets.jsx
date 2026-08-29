@@ -73,7 +73,16 @@ const LATEST_START = '20:00';
  * confirm. Seeing the consequence is what makes it feel like a choice rather
  * than a menu.
  */
-export function TimeCard({ hours = 2, onPick, disabled }) {
+export function TimeCard({ hours = 2, range = false, onPick, disabled }) {
+  if (range) return <TimeRangeCard onPick={onPick} disabled={disabled} />;
+  return <StartTimeCard hours={hours} onPick={onPick} disabled={disabled} />;
+}
+
+const timeBtnClass =
+  'bg-white border-2 border-navy/10 hover:border-coral disabled:opacity-40 text-navy font-body font-bold text-[11px] py-2 rounded-lg transition-colors active:scale-95';
+
+/** Start time only; the finish time follows from the package length. */
+function StartTimeCard({ hours, onPick, disabled }) {
   const [custom, setCustom] = useState('');
   const [showCustom, setShowCustom] = useState(false);
 
@@ -91,7 +100,7 @@ export function TimeCard({ hours = 2, onPick, disabled }) {
             type="button"
             disabled={disabled}
             onClick={() => onPick(t.label, t.value)}
-            className="bg-white border-2 border-navy/10 hover:border-coral disabled:opacity-40 text-navy font-body font-bold text-[11px] py-2 rounded-lg transition-colors active:scale-95"
+            className={timeBtnClass}
           >
             {t.label}
           </button>
@@ -133,6 +142,166 @@ export function TimeCard({ hours = 2, onPick, disabled }) {
             className="w-full mt-2.5 bg-coral hover:bg-coral-dark disabled:opacity-40 text-white font-body font-extrabold text-sm py-2.5 rounded-full transition-colors active:scale-[0.99]"
           >
             Use this time
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Minutes since midnight, for comparing HH:MM strings.
+function minutesOf(hhmm) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || '').trim());
+  return m ? +m[1] * 60 + +m[2] : null;
+}
+
+function hoursBetween(start, end) {
+  const a = minutesOf(start);
+  const b = minutesOf(end);
+  if (a == null || b == null || b <= a) return 0;
+  return Math.round(((b - a) / 60) * 4) / 4; // quarter-hour precision
+}
+
+/**
+ * Start AND finish in one card, for festivals and crowded events where the
+ * client picks the window themselves. Sends one message with both times and
+ * the hour count so Sky never has to ask when it ends.
+ */
+function TimeRangeCard({ onPick, disabled }) {
+  const [start, setStart] = useState('');
+  const [end, setEnd] = useState('');
+  const [customStart, setCustomStart] = useState(false);
+  const [customEnd, setCustomEnd] = useState(false);
+
+  const startMin = minutesOf(start);
+  const finishOptions = start
+    ? Array.from({ length: 8 }, (_, i) => {
+        const total = startMin + (i + 1) * 60;
+        if (total > 22 * 60) return null;
+        const value = `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+        return { value, label: formatTime(value) };
+      }).filter(Boolean)
+    : [];
+
+  const hours = hoursBetween(start, end);
+  const hoursLabel = hours === 1 ? '1 hour' : `${hours} hours`;
+
+  const submit = () => {
+    if (!hours) return;
+    onPick(`${formatTime(start)} to ${formatTime(end)} (${hoursLabel})`, { start, end, hours });
+  };
+
+  return (
+    <div className="mt-2">
+      <p className="font-body font-bold text-navy text-xs mb-1.5">
+        {start ? `Starts ${formatTime(start)}. ` : ''}
+        {!start ? 'What time does it start?' : 'And when does it wrap up?'}
+        {start && (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => {
+              setStart('');
+              setEnd('');
+              setCustomStart(false);
+              setCustomEnd(false);
+            }}
+            className="ml-2 text-navy/50 hover:text-coral underline font-bold"
+          >
+            change
+          </button>
+        )}
+      </p>
+
+      {!start && !customStart && (
+        <>
+          <div className="grid grid-cols-4 gap-1.5">
+            {START_TIMES.map((t) => (
+              <button key={t.value} type="button" disabled={disabled} onClick={() => setStart(t.value)} className={timeBtnClass}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => setCustomStart(true)}
+            className="w-full mt-1.5 text-navy/50 hover:text-coral disabled:opacity-40 font-body font-bold text-[11px] py-2 underline transition-colors"
+          >
+            Another time
+          </button>
+        </>
+      )}
+
+      {!start && customStart && (
+        <div className={cardClass}>
+          <input
+            type="time"
+            min={EARLIEST_START}
+            max={LATEST_START}
+            step={300}
+            onChange={(e) => e.target.value && setStart(e.target.value)}
+            className="w-full border border-navy/15 rounded-xl px-3 py-2 font-body text-sm bg-white focus:outline-none"
+          />
+        </div>
+      )}
+
+      {start && !customEnd && (
+        <>
+          <div className="grid grid-cols-4 gap-1.5">
+            {finishOptions.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                disabled={disabled}
+                onClick={() => setEnd(t.value)}
+                className={`${timeBtnClass} ${end === t.value ? 'border-coral bg-coral/5' : ''}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => {
+              setEnd('');
+              setCustomEnd(true);
+            }}
+            className="w-full mt-1.5 text-navy/50 hover:text-coral disabled:opacity-40 font-body font-bold text-[11px] py-2 underline transition-colors"
+          >
+            Another time
+          </button>
+        </>
+      )}
+
+      {start && customEnd && (
+        <div className={cardClass}>
+          <input
+            type="time"
+            value={end}
+            min={start}
+            step={300}
+            onChange={(e) => setEnd(e.target.value)}
+            className="w-full border border-navy/15 rounded-xl px-3 py-2 font-body text-sm bg-white focus:outline-none"
+          />
+        </div>
+      )}
+
+      {start && end && (
+        <div className="mt-2">
+          <p className="font-body text-navy/45 text-[11px]">
+            {hours
+              ? `${formatTime(start)} to ${formatTime(end)}, ${hoursLabel} of face painting.`
+              : 'The finish time needs to be after the start.'}
+          </p>
+          <button
+            type="button"
+            disabled={!hours || disabled}
+            onClick={submit}
+            className="w-full mt-2 bg-coral hover:bg-coral-dark disabled:opacity-40 text-white font-body font-extrabold text-sm py-2.5 rounded-full transition-colors active:scale-[0.99]"
+          >
+            Use these times
           </button>
         </div>
       )}

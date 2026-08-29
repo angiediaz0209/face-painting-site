@@ -252,7 +252,7 @@ export default function ChatWidget({ onClose }) {
       case 'date_picker':
         return <DatePickerCard onPick={pick} disabled={stale} />;
       case 'time_picker':
-        return <TimeCard hours={msg.ui.hours} onPick={pick} disabled={stale} />;
+        return <TimeCard hours={msg.ui.hours} range={msg.ui.range} onPick={pick} disabled={stale} />;
       case 'quote':
         return (
           <QuoteCard

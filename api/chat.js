@@ -285,14 +285,19 @@ const SHOW_DATE_PICKER_TOOL = {
 const SHOW_TIME_PICKER_TOOL = {
   name: "show_time_picker",
   description:
-    "Shows tappable start times under your message, plus an 'Another time' option for anything not on the list. Use when asking what time the event starts. Pass the package length so the card can show the client the finish time too.",
+    "Shows tappable start times under your message, plus an 'Another time' option for anything not on the list. Use when asking what time the event starts. Pass the package length so the card can show the client the finish time too. For festivals and crowded events pass range: true instead: the card then asks for the start AND the finish time in one go and replies with both plus the number of hours, so you never have to ask when it ends.",
   input_schema: {
     type: "object",
     properties: {
       hours: {
         type: "number",
         description:
-          "The package length in hours, so the card can show the client the full range (e.g. 2:00 PM to 4:00 PM). Defaults to 2 if you don't know it yet.",
+          "The package length in hours, so the card can show the client the full range (e.g. 2:00 PM to 4:00 PM). Defaults to 2 if you don't know it yet. Ignored when range is true.",
+      },
+      range: {
+        type: "boolean",
+        description:
+          "Set true for festivals and crowded events, where the client chooses the start and finish time themselves. The card collects both and the hours come from the client's answer.",
       },
     },
   },
@@ -363,6 +368,7 @@ const WIDGET_TOOLS = {
   show_time_picker: (input) => ({
     type: "time_picker",
     hours: Number(input.hours) > 0 ? Number(input.hours) : 2,
+    range: input.range === true,
   }),
   show_quote: (input) => {
     const ui = {
