@@ -278,7 +278,7 @@ const SHOW_OPTIONS_TOOL = {
 const SHOW_DATE_PICKER_TOOL = {
   name: "show_date_picker",
   description:
-    "Shows a calendar under your message with already-booked days crossed out, so the client taps a date instead of typing one. Use this when you're asking what date their event is. It saves you calling check_availability for a date that's already taken.",
+    "Shows a calendar under your message so the client taps a date instead of typing one. Fully blocked days are crossed out; days with another timed booking stay selectable (a second event can fit around it), so after they pick, still call check_availability with the date and then with the times. Use this when you're asking what date their event is.",
   input_schema: { type: "object", properties: {} },
 };
 

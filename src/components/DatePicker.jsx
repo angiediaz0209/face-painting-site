@@ -14,7 +14,9 @@ function iso(year, month, day) {
 }
 
 /**
- * Month grid that greys out days already taken on the calendar.
+ * Month grid that greys out days already taken on the calendar. Days that only
+ * have a timed booking stay selectable (more than one event a day is fine when
+ * there's room between them) and get a small dot instead.
  *
  * Availability comes from /api/booking?action=availability, which returns dates
  * only — never event details. If that call fails the grid still works, it just
@@ -25,6 +27,7 @@ export default function DatePicker({ value, onChange }) {
   const [year, setYear] = useState(() => Number((value || today).slice(0, 4)));
   const [month, setMonth] = useState(() => Number((value || today).slice(5, 7)) - 1);
   const [busy, setBusy] = useState(new Set());
+  const [partial, setPartial] = useState(new Set());
 
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstWeekday = new Date(year, month, 1).getDay();
@@ -40,12 +43,16 @@ export default function DatePicker({ value, onChange }) {
     const to = iso(year, month, daysInMonth);
 
     fetch(`/api/booking?action=availability&from=${from}&to=${to}`)
-      .then((r) => (r.ok ? r.json() : { busyDates: [] }))
+      .then((r) => (r.ok ? r.json() : { busyDates: [], partialDates: [] }))
       .then((data) => {
-        if (!cancelled) setBusy(new Set(data.busyDates || []));
+        if (cancelled) return;
+        setBusy(new Set(data.busyDates || []));
+        setPartial(new Set(data.partialDates || []));
       })
       .catch(() => {
-        if (!cancelled) setBusy(new Set());
+        if (cancelled) return;
+        setBusy(new Set());
+        setPartial(new Set());
       });
 
     return () => {
@@ -105,6 +112,7 @@ export default function DatePicker({ value, onChange }) {
           const date = iso(year, month, day);
           const isPast = date < today;
           const isBusy = busy.has(date);
+          const isPartial = !isBusy && partial.has(date);
           const disabled = isPast || isBusy;
           const selected = value === date;
 
@@ -114,9 +122,11 @@ export default function DatePicker({ value, onChange }) {
               type="button"
               disabled={disabled}
               onClick={() => onChange(date)}
-              aria-label={`${date}${isBusy ? ', already booked' : ''}`}
+              aria-label={`${date}${
+                isBusy ? ', already booked' : isPartial ? ', has another event, some times open' : ''
+              }`}
               aria-pressed={selected}
-              className={`aspect-square rounded-xl text-sm font-body font-bold transition-colors ${
+              className={`relative aspect-square rounded-xl text-sm font-body font-bold transition-colors ${
                 selected
                   ? 'bg-coral text-white'
                   : disabled
@@ -125,13 +135,21 @@ export default function DatePicker({ value, onChange }) {
               }`}
             >
               {day}
+              {isPartial && !isPast && (
+                <span
+                  aria-hidden="true"
+                  className={`absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full ${
+                    selected ? 'bg-white' : 'bg-coral'
+                  }`}
+                />
+              )}
             </button>
           );
         })}
       </div>
 
       <p className="text-[11px] font-body text-navy/40 text-center mt-3">
-        Crossed out days are already booked
+        Crossed out days are booked. Dotted days have another event, some times are open
       </p>
     </div>
   );

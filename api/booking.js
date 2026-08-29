@@ -5,7 +5,9 @@
 // multiplexing trick api/status.js uses for its opt-out action.
 //
 //   GET  /api/booking?action=availability&from=YYYY-MM-DD&to=YYYY-MM-DD
-//        -> { busyDates: ["2026-08-02", ...] }   dates only, never event details
+//        -> { busyDates: [...], partialDates: [...] }   dates only, never event details
+//           busyDates: fully blocked (all-day events); partialDates: has a timed
+//           booking but may still fit another one
 //   POST /api/booking
 //        -> creates a PENDING booking, exactly like Sky does, for team approval
 //
@@ -118,17 +120,17 @@ async function handleAvailability(req, res, url) {
   }
 
   try {
-    const busyDates = await listBusyDates({ from, to });
+    const { busyDates, partialDates } = await listBusyDates({ from, to });
     // Short cache: the calendar rarely changes minute to minute, and this keeps
     // month-flipping in the date picker cheap.
     res.setHeader("Cache-Control", "public, max-age=60, s-maxage=60");
-    return json(res, 200, { busyDates });
+    return json(res, 200, { busyDates, partialDates });
   } catch (error) {
     console.error("Availability error:", error);
     // Fail OPEN for display only: showing every day as bookable is fine because
     // every booking is still team-approved before it's confirmed. We just can't
     // grey out taken days this once.
-    return json(res, 200, { busyDates: [], unverified: true });
+    return json(res, 200, { busyDates: [], partialDates: [], unverified: true });
   }
 }
 

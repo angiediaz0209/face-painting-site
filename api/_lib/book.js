@@ -97,11 +97,19 @@ export async function listBusyDates({ from, to }) {
     maxResults: 2500,
   });
 
+  // More than one booking a day is fine as long as there is enough time
+  // between them (assessSameDayTiming decides that once the times are known),
+  // so a timed booking must NOT cross the whole day out in the date picker.
+  // Only all-day events (a day the owner has blocked, a multi-day job) take
+  // the full day. Days with a timed booking are reported separately so the
+  // picker can mark them without disabling them.
   const busy = new Set();
+  const partial = new Set();
   for (const e of result.data.items || []) {
     const startRaw = e.start?.dateTime || e.start?.date;
     if (!startRaw) continue;
     const endRaw = e.end?.dateTime || e.end?.date || startRaw;
+    const isAllDay = Boolean(e.start?.date && !e.start?.dateTime);
 
     // Walk every day the event covers, so multi-day events block each of them.
     const startDay = toPacificDate(startRaw);
@@ -110,15 +118,16 @@ export async function listBusyDates({ from, to }) {
     const last = new Date(`${endDay}T12:00:00`);
     // All-day events use an EXCLUSIVE end date, so the last day they actually
     // cover is the day before. Timed events end on the day they end.
-    if (e.start?.date && !e.start?.dateTime) last.setDate(last.getDate() - 1);
+    if (isAllDay) last.setDate(last.getDate() - 1);
     let guard = 0;
     while (cursor <= last && guard++ < 400) {
-      busy.add(toPacificDate(cursor.toISOString()));
+      (isAllDay ? busy : partial).add(toPacificDate(cursor.toISOString()));
       cursor.setDate(cursor.getDate() + 1);
     }
   }
+  for (const d of busy) partial.delete(d);
 
-  return [...busy].sort();
+  return { busyDates: [...busy].sort(), partialDates: [...partial].sort() };
 }
 
 // Format an ISO datetime (or all-day date) into Pacific-time YYYY-MM-DD.
