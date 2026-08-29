@@ -419,6 +419,45 @@ const STATUS_STYLES = {
 // `b` is a normalized booking (see parseEventToBooking). Pass `eventId` + `token`
 // (the same HMAC that gated the page) to enable the discreet self-serve
 // reschedule request form.
+// Google Places suggestions on the booking page's address box, so a late-sent
+// address arrives complete. Same key as the site's chat widget; does nothing
+// when it isn't configured. Picking a suggestion fills the plain input, which
+// stays the thing that gets submitted; "Type it instead" shows it directly.
+function placesScript() {
+  const key = process.env.VITE_GOOGLE_MAPS_BROWSER_KEY || "";
+  if (!key) return "";
+  return `<tr><td><script>
+  (function(){
+    var input = document.querySelector('input[name="location"]'); if (!input) return;
+    var host = document.createElement('div'); host.style.marginBottom = '12px';
+    var link = document.createElement('a'); link.href = '#'; link.textContent = 'Type it instead'; link.style.cssText = 'display:block;text-align:center;font-size:12px;color:${MUTED};margin:-4px 0 12px;';
+    var el = null;
+    function manual(){ if (el) el.remove(); host.remove(); link.remove(); input.style.display = ''; input.focus(); }
+    link.addEventListener('click', function(ev){ ev.preventDefault(); manual(); });
+    window.__fpPlaces = async function(){
+      try {
+        var lib = await google.maps.importLibrary('places');
+        el = new lib.PlaceAutocompleteElement({ includedRegionCodes: ['us'], locationBias: { north: 38.6, south: 37.6, east: -122.0, west: -123.1 } });
+        el.style.width = '100%';
+        host.appendChild(el);
+        input.parentNode.insertBefore(host, input); input.parentNode.insertBefore(link, input);
+        input.style.display = 'none';
+        el.addEventListener('gmp-select', async function(e){
+          var p = e.placePrediction.toPlace();
+          await p.fetchFields({ fields: ['formattedAddress', 'displayName'] });
+          var a = p.formattedAddress || '', n = p.displayName || '';
+          input.value = (!n || a.toLowerCase().indexOf(n.toLowerCase()) === 0) ? a : n + ', ' + a;
+          manual();
+        });
+      } catch (err) { console.warn('Places unavailable', err); }
+    };
+    var s = document.createElement('script');
+    s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(${JSON.stringify(key)}) + '&v=weekly&loading=async&callback=__fpPlaces';
+    s.async = true; document.head.appendChild(s);
+  })();
+  </script></td></tr>`;
+}
+
 export function clientStatusHtml(b, { eventId, token } = {}) {
   const status = (b.status || "PENDING").toUpperCase();
   const s = STATUS_STYLES[status] || STATUS_STYLES.PENDING;
@@ -528,7 +567,8 @@ export function clientStatusHtml(b, { eventId, token } = {}) {
   ${active && !requested && b.date && b.time ? `<tr><td style="padding:22px 30px 6px;text-align:center;">${ctaButton(addToCalendarUrl(b), "Add to Calendar")}</td></tr>` : ""}
   ${contractBlock}
   ${addressBlock}
-  ${rescheduleBlock}`;
+  ${rescheduleBlock}
+  ${addressBlock ? placesScript() : ""}`;
   return shell({ preheader: `Your booking status: ${s.title}`, inner });
 }
 

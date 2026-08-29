@@ -167,3 +167,14 @@ input:focus, textarea:focus {
     transform: none;
   }
 }
+
+/* Google Places box inside Sky's booking card: match the other inputs. */
+.fp-places gmp-place-autocomplete {
+  width: 100%;
+  --gmp-mat-color-surface: #fff;
+  --gmp-mat-color-on-surface: #1f2a44;
+  --gmp-mat-color-primary: #e8836b;
+  --gmp-mat-font-family: inherit;
+  --gmp-mat-font-size: 14px;
+  font-family: inherit;
+}

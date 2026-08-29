@@ -26,3 +26,20 @@ the production build.
 npm test            # run once
 npm run test:watch  # re-run on save
 ```
+
+## Address autocomplete (Google Places)
+
+Sky's booking card and the client's booking page suggest real addresses and
+venues as the client types, biased to Marin / SF / Santa Rosa. It switches on
+when `VITE_GOOGLE_MAPS_BROWSER_KEY` is set (Vercel env var for production,
+`.env.local` for local dev) and falls back to a plain text box otherwise.
+
+Creating the key (Google Cloud Console, same Google account as the calendar):
+
+1. APIs & Services → Library → enable **Places API (New)** and **Maps JavaScript API**.
+2. Credentials → Create credentials → API key.
+3. Restrict it: Application restrictions → **Websites** →
+   `https://face-painting-site.vercel.app/*` (plus your custom domain and
+   `http://localhost:5178/*` for dev). API restrictions → the two APIs above.
+4. Billing must be enabled on the project; usage at this volume stays inside
+   Google's monthly free credit.

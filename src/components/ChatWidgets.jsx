@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import DatePicker from './DatePicker';
+import { PlacesProvider, AddressAutocomplete, hasPlaces, labelFor } from './AddressAutocomplete';
 import {
   START_TIMES,
   computeQuote,
@@ -198,6 +199,9 @@ export function DetailsForm({ booking, transcript, onSubmitted, disabled }) {
   // It never mentions themes or designs, so it can't read as an offer of custom
   // work — that stays a conversation with the team.
   const [extra, setExtra] = useState('');
+  // Address entry: Google suggestions when the key is configured, otherwise
+  // (or after "type it instead" / a pick) the plain box.
+  const [addrManual, setAddrManual] = useState(!hasPlaces);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const honeypotRef = useRef(null);
@@ -286,16 +290,43 @@ export function DetailsForm({ booking, transcript, onSubmitted, disabled }) {
         {/* This is the EVENT location, not the client's home. The label has to
             say so: browser autofill offers their home address, which is right
             for a party at home and badly wrong for one at a park. */}
-        <input
-          type="text"
-          value={values.address}
-          onChange={(e) => set({ address: e.target.value })}
-          autoComplete="street-address"
-          placeholder="Where's the party? Address or venue"
-          className={inputClass}
-        />
+        {addrManual ? (
+          <input
+            type="text"
+            value={values.address}
+            onChange={(e) => set({ address: e.target.value })}
+            autoComplete="street-address"
+            placeholder="Where's the party? Address or venue"
+            className={inputClass}
+          />
+        ) : (
+          <PlacesProvider>
+            <AddressAutocomplete
+              className="fp-places"
+              onSelect={(p) => {
+                set({ address: labelFor(p) });
+                setAddrManual(true);
+              }}
+            />
+          </PlacesProvider>
+        )}
         <p className="font-body text-navy/40 text-[11px] -mt-1 px-1">
           Not booked a venue yet? Leave it blank and send it over later.
+          {hasPlaces && (
+            <>
+              {' · '}
+              <button
+                type="button"
+                className="underline hover:text-coral"
+                onClick={() => {
+                  if (!addrManual) setAddrManual(true);
+                  else { set({ address: '' }); setAddrManual(false); }
+                }}
+              >
+                {addrManual ? 'Search addresses' : 'Type it instead'}
+              </button>
+            </>
+          )}
         </p>
         <textarea
           value={extra}
