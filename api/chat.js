@@ -22,7 +22,7 @@ const DETAIL_PROPS = {
   occasion: {
     type: "string",
     description:
-      "For corporate events: the occasion, e.g. holiday party, family day, team building, product launch.",
+      "For corporate events: the occasion, e.g. holiday party, family day, team building, product launch. For festivals and community events: the name of the event, e.g. Ross Fall Festival, Spring Carnival.",
   },
   guestMix: {
     type: "string",
@@ -33,7 +33,7 @@ const DETAIL_PROPS = {
   specialRequests: {
     type: "string",
     description:
-      "Anything the client VOLUNTEERED that the artist should know: allergies or sensitive skin, a nervous child, parking or setup notes, a theme they mentioned unprompted. Never ask for this, only record what they offered.",
+      "What the artist should know: the theme (you ask this once), plus anything the client VOLUNTEERED: allergies or sensitive skin, a nervous child, parking or setup notes. For festivals and crowded events always include: festival/booth style, quick designs to keep the line moving, the expected crowd size, and the hours. Beyond the theme, never ask for this, only record what they offered.",
   },
   customRequest: {
     type: "string",
