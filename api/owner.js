@@ -214,7 +214,10 @@ function sendAgreementRow(b) {
     ? `Hi ${first}, here's a copy of your signed booking agreement with Face Painting California: ${contractUrl}`
     : `Hi ${first}, here's your booking agreement with Face Painting California. It's already filled in, just read it and sign at the bottom: ${contractUrl}`;
   const email = b.email
-    ? `<form method="POST" action="/api/owner" style="display:inline">
+    ? `<form method="POST" action="/api/owner" style="display:inline"
+        data-confirm="${esc(signed
+          ? `Email a copy of the signed agreement to ${b.client || "the client"} at ${b.email} now?`
+          : `Send the booking agreement to ${b.client || "the client"} at ${b.email} now? They'll get an email asking them to read and sign it.`)}">
         <input type="hidden" name="action" value="send-agreement">
         <input type="hidden" name="eventId" value="${esc(b.eventId)}">
         <button class="btn btn-text" type="submit">✉️ ${signed ? "Email signed copy" : "Email agreement"}</button>
