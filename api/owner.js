@@ -14,7 +14,7 @@ import {
   addGalleryImage,
   removeGalleryImage,
 } from "./_lib/sheets.js";
-import { fmtTimeRange, fmtDate, fmtSignedAt, fmtPhone, BUSINESS_PHONE, birthdayPromoHtml, agreementRequestHtml, contractHtml, sendEmail } from "./_lib/email.js";
+import { fmtTimeRange, fmtDate, fmtSignedAt, fmtPhone, birthdayPromoHtml, agreementRequestHtml, contractHtml, sendEmail } from "./_lib/email.js";
 import {
   getClients,
   upsertClient,
@@ -567,7 +567,6 @@ export function reminderText(b, today = todayPacific()) {
     `Hi ${first}, this is Face Painting California confirming your ${when ? `booking ${when}` : "upcoming booking"}.`,
     details.join("\n"),
     "Please reply to confirm, or let us know if anything has changed.",
-    `Thank you,\nFace Painting California\n${BUSINESS_PHONE}`,
   ].join("\n\n");
 }
 
