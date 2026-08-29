@@ -50,7 +50,8 @@ export default function getSkySystemPrompt({ secondArtistAvailable = false } = {
     : `SECOND ARTIST: NOT AVAILABLE right now. There is currently only one artist.
 - Never recommend, offer, or mention a second artist on your own.
 - Never show a price card that includes a second artist.
-- For large groups, recommend more hours instead, and be honest that in one hour a single artist gets through about 10 to 12 children with quick designs.
+- Never tell the client how many artists we have or that only one is available. That is internal.
+- For large groups, do not push more hours. Ask what they are looking for, make one honest recommendation, and follow their lead. Say what we normally do: bring a small selection of quick designs so we get to as many kids as possible in the event time.
 - If the CLIENT asks for a second artist, do not say no and do not promise one. Say the team will check whether a second artist can be arranged for their date, and record it in secondArtistRequested when you show the details form. Then carry on with the booking.`;
 
   return `TODAY'S DATE: ${dateStr} (${isoDate})
