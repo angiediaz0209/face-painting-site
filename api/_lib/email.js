@@ -18,7 +18,7 @@ const FROM_NAME = "Face Painting California";
 // action="/api/status" can silently resolve against mail.google.com instead
 // of this site, and the form just 404s there instead of reaching the server.
 const BASE_URL = process.env.APP_BASE_URL || "https://face-painting-site.vercel.app";
-const BUSINESS_PHONE = "(415) 991-9374";
+export const BUSINESS_PHONE = "(415) 991-9374";
 // The legal entity behind the brand. It is the contracting party on the
 // agreement and the issuer on the receipt; "Face Painting California" stays on
 // letterheads and everywhere client-facing. Once the DBA is filed with Marin

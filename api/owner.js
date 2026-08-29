@@ -14,7 +14,7 @@ import {
   addGalleryImage,
   removeGalleryImage,
 } from "./_lib/sheets.js";
-import { fmtTimeRange, fmtSignedAt, fmtPhone, birthdayPromoHtml, agreementRequestHtml, contractHtml, sendEmail } from "./_lib/email.js";
+import { fmtTimeRange, fmtDate, fmtSignedAt, fmtPhone, BUSINESS_PHONE, birthdayPromoHtml, agreementRequestHtml, contractHtml, sendEmail } from "./_lib/email.js";
 import {
   getClients,
   upsertClient,
@@ -557,10 +557,18 @@ function daysUntil(iso, today) {
 export function reminderText(b, today = todayPacific()) {
   const first = firstName(b.client) || "there";
   const n = daysUntil(b.date, today);
-  const when = n === 0 ? "today" : n === 1 ? "tomorrow" : `on ${shortDate(b.date)}`;
-  const time = b.time ? ` from ${fmtTimeRange(b.time)}` : "";
-  const where = b.location ? ` at ${b.location}` : "";
-  return `Hi ${first}! It's Face Painting California 🎨 Just checking in ahead of your event ${when}: we have you down${time}${where}. Still all good? If anything has changed, just reply here. See you soon!`;
+  const when = n === 0 ? "today" : n === 1 ? "tomorrow" : "";
+  const details = [
+    `Date: ${fmtDate(b.date) || b.date}`,
+    b.time ? `Time: ${fmtTimeRange(b.time)}` : null,
+    b.location ? `Location: ${b.location}` : null,
+  ].filter(Boolean);
+  return [
+    `Hi ${first}, this is Face Painting California confirming your ${when ? `booking ${when}` : "upcoming booking"}.`,
+    details.join("\n"),
+    "Please reply to confirm, or let us know if anything has changed.",
+    `Thank you,\nFace Painting California\n${BUSINESS_PHONE}`,
+  ].join("\n\n");
 }
 
 function reminderButton(b, label = "💬 Text reminder") {
