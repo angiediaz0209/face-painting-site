@@ -439,6 +439,7 @@ function placesScript() {
         var lib = await google.maps.importLibrary('places');
         el = new lib.PlaceAutocompleteElement({ includedRegionCodes: ['us'], locationBias: { north: 38.6, south: 37.6, east: -122.0, west: -123.1 } });
         el.style.width = '100%';
+        el.setAttribute('placeholder', input.getAttribute('placeholder') || 'Address, park or venue name');
         host.appendChild(el);
         input.parentNode.insertBefore(host, input); input.parentNode.insertBefore(link, input);
         input.style.display = 'none';

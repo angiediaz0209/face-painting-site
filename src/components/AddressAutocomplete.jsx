@@ -32,7 +32,7 @@ export function PlacesProvider({ children }) {
  * picks a suggestion. `address` is Google's formatted address; `name` is the
  * venue name when the pick is a place rather than a street address.
  */
-export function AddressAutocomplete({ onSelect, className = '' }) {
+export function AddressAutocomplete({ onSelect, className = '', placeholder = "Where's the party? Address or venue" }) {
   const places = useMapsLibrary('places');
   const hostRef = useRef(null);
   const onSelectRef = useRef(onSelect);
@@ -45,6 +45,7 @@ export function AddressAutocomplete({ onSelect, className = '' }) {
       locationBias: SERVICE_AREA,
     });
     el.style.width = '100%';
+    if (placeholder) el.setAttribute('placeholder', placeholder);
     const handler = async (e) => {
       try {
         const place = e.placePrediction.toPlace();
@@ -65,7 +66,7 @@ export function AddressAutocomplete({ onSelect, className = '' }) {
       el.removeEventListener('gmp-select', handler);
       el.remove();
     };
-  }, [places]);
+  }, [places, placeholder]);
 
   return <div ref={hostRef} className={className} />;
 }
