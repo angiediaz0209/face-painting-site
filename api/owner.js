@@ -266,7 +266,8 @@ function bookingCard(b) {
             <button class="btn btn-resched" data-toggle="rf-${eid}">Reschedule</button>`;
   } else {
     btns = `${link("/api/decline", b.eventId, "Cancel", "btn-cancel")}
-            <button class="btn btn-resched" data-toggle="rf-${eid}">Reschedule</button>`;
+            <button class="btn btn-resched" data-toggle="rf-${eid}">Reschedule</button>
+            ${b.status === "CONFIRMED" ? reminderButton(b) : ""}`;
   }
 
   const requested =
@@ -543,6 +544,48 @@ function askReviewControls(base, { key, name, phone }) {
     <input id="${cid}" type="text" readonly value="${esc(link)}" style="position:absolute;left:-9999px" aria-hidden="true">`;
 }
 
+// ── Pre-event reminder texts ────────────────────────────────────────────────
+// Same idea as "Text the link" on the agreement: one tap opens Messages with
+// the note ready, nothing is sent automatically. Confirmed bookings only.
+const REMINDER_DAYS = 7;
+
+function daysUntil(iso, today) {
+  const a = new Date(`${iso}T12:00:00`), b = new Date(`${today}T12:00:00`);
+  return Math.round((a - b) / 86400000);
+}
+
+export function reminderText(b, today = todayPacific()) {
+  const first = firstName(b.client) || "there";
+  const n = daysUntil(b.date, today);
+  const when = n === 0 ? "today" : n === 1 ? "tomorrow" : `on ${shortDate(b.date)}`;
+  const time = b.time ? ` from ${fmtTimeRange(b.time)}` : "";
+  const where = b.location ? ` at ${b.location}` : "";
+  return `Hi ${first}! It's Face Painting California 🎨 Just checking in ahead of your event ${when}: we have you down${time}${where}. Still all good? If anything has changed, just reply here. See you soon!`;
+}
+
+function reminderButton(b, label = "💬 Text reminder") {
+  return b.phone ? `<a class="btn btn-text" href="${esc(smsHref(b.phone, reminderText(b)))}">${label}</a>` : "";
+}
+
+function reminderCard(b, today) {
+  const n = daysUntil(b.date, today);
+  const taid = `rem-${esc(b.eventId)}`;
+  return `<div class="card">
+    <div class="crow">
+      <div class="cname">${esc(b.client || "—")}</div>
+      <span class="days">${n === 0 ? "today" : n === 1 ? "tomorrow" : `in ${n} days`}</span>
+    </div>
+    <div class="fmeta">${esc(shortWhen(b))}</div>
+    ${b.location ? `<div class="fsub">${esc(b.location)}</div>` : ""}
+    <div class="copybox"><textarea id="${taid}" rows="4" readonly>${esc(reminderText(b, today))}</textarea></div>
+    <div class="cactions">
+      ${reminderButton(b, `💬 Text ${esc(firstName(b.client) || "client")}`)}
+      <button class="btn btn-copy" data-copy="${taid}">Copy text</button>
+      ${!b.phone ? `<span class="crmeta">No phone on file${b.email ? ` · ${esc(b.email)}` : ""}</span>` : ""}
+    </div>
+  </div>`;
+}
+
 function followupCard(f) {
   const key = esc(f.key);
   const taid = `sug-${key}`;
@@ -569,14 +612,22 @@ function followupCard(f) {
   </div>`;
 }
 
-export function followupsPage(followups) {
+export function followupsPage(followups, reminders = [], today = todayPacific()) {
   const list = followups.length
     ? followups.map(followupCard).join("")
     : `<div class="empty fullrow">No birthdays coming up in the next few weeks.</div>`;
+  const remList = reminders.length
+    ? reminders.map((b) => reminderCard(b, today)).join("")
+    : `<div class="empty fullrow">No confirmed events in the next ${REMINDER_DAYS} days.</div>`;
   const content = `
-    <div class="vhead"><div><h1>Follow-ups</h1><p class="sub">${followups.length} birthday${followups.length === 1 ? "" : "s"} coming up · ${esc(BIRTHDAY_DISCOUNT)} offer</p></div></div>
+    <div class="vhead"><div><h1>Follow-ups</h1><p class="sub">${reminders.length} event${reminders.length === 1 ? "" : "s"} this week · ${followups.length} birthday${followups.length === 1 ? "" : "s"} coming up · ${esc(BIRTHDAY_DISCOUNT)} offer</p></div></div>
     <p class="hint">Text is the fastest way. Tap “Text” to open Messages with the note ready, or Copy it. Email is optional.</p>
-    <div class="cardgrid" style="margin-top:14px">${list}</div>`;
+    <div class="cardgrid" style="margin-top:14px">
+      <div class="sec">Coming up this week · reminder texts</div>
+      ${remList}
+      <div class="sec" style="margin-top:8px">Birthdays</div>
+      ${list}
+    </div>`;
   return shellPage("Follow-ups · Face Painting CA", appShell("followups", content), DASHBOARD_SCRIPT);
 }
 
@@ -1581,7 +1632,10 @@ export default async function handler(req, res) {
           .filter(Boolean)
       );
       const followups = await listBirthdayFollowups({ clients, excludeKeys });
-      return html(200, followupsPage(followups));
+      const reminders = bookings
+        .filter((b) => b.status === "CONFIRMED" && b.date >= today && daysUntil(b.date, today) <= REMINDER_DAYS)
+        .sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")));
+      return html(200, followupsPage(followups, reminders, today));
     }
 
     // Bookings, either scope. Past is a toggle here now too — same reasoning as
