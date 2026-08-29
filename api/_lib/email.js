@@ -1047,8 +1047,8 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
     <button type="button" class="print-btn" id="ag-print" style="background:${CORAL};color:#fff;border:none;padding:10px 20px;border-radius:22px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">🖨 Print</button>
     <div class="print-hint">Tap any line to type. For a clean copy, untick "Headers and footers" in the print dialog.</div>
   </div>`
-    : `<div class="toolbar"><button onclick="window.print()">🖨 Print</button><div class="print-hint">For a clean copy, untick "Headers and footers" in the print dialog.</div></div>`}
-  ${edit ? `<form id="ag-print-form" method="POST" action="/api/owner" target="_blank"><input type="hidden" name="action" value="quick-agreement"><input type="hidden" name="print" value="1">` : ""}
+    : `<div class="toolbar">${backHref ? `<a class="ghost" href="${esc(backHref)}" style="float:left;background:#fff;color:${BODY};border:1px solid ${LINE};padding:10px 16px;border-radius:22px;font-weight:700;font-size:14px;text-decoration:none;font-family:inherit">‹ Back to agreement</a>` : ""}<button onclick="window.print()">🖨 Print</button><div class="print-hint">For a clean copy, untick "Headers and footers" in the print dialog.</div></div>`}
+  ${edit ? `<form id="ag-print-form" method="POST" action="/api/owner" target="_top"><input type="hidden" name="action" value="quick-agreement"><input type="hidden" name="print" value="1">` : ""}
   <table class="sheet"><tfoot><tr><td><div class="print-foot"><span>${[LEGAL_NAME, "Face Painting California", `Booking Agreement${hasNo ? ` No. ${docNo}` : ""}`, blank ? "" : b.client, blank ? "" : fmtDate(b.date)].filter(Boolean).map(esc).join(" · ")}</span><span>Terms v${esc(blank ? CONTRACT_VERSION : b.contractVersion || CONTRACT_VERSION)}${signed ? " · Signed electronically" : ""}</span></div></td></tr></tfoot><tbody><tr><td>
   <div class="paper">
     <div class="letterhead">
@@ -1130,14 +1130,24 @@ export function contractHtml(b, { eventId, token, error = "", blank = false, pap
       var p = sel.value === '' ? null : people[+sel.value];
       for (var f in map) { var el = byName(f); if (el) el.value = p ? (p[map[f]] || '') : ''; }
       var d = byName('date'); if (p && d && !d.value) d.focus();
+      save();
     });
     document.getElementById('ag-clear').addEventListener('click', function(){
       document.querySelectorAll('.wi').forEach(function(el){ el.value = ''; }); sel.value = '';
+      try { sessionStorage.removeItem(KEY); } catch (e) {}
     });
     // Print opens the filled-in contract in its own tab (never inside the
     // dashboard frame), so the browser shows its full print dialog: printer,
     // copies, and so on.
-    document.getElementById('ag-print').addEventListener('click', function(){ document.getElementById('ag-print-form').submit(); });
+    var KEY = 'ag-draft';
+    function inputs(){ return Array.prototype.slice.call(document.querySelectorAll('.wi')); }
+    function save(){ var d = {}; inputs().forEach(function(el){ if (el.value) d[el.name] = el.value; }); try { sessionStorage.setItem(KEY, JSON.stringify(d)); } catch (e) {} }
+    function restore(){ try { var d = JSON.parse(sessionStorage.getItem(KEY) || '{}'); inputs().forEach(function(el){ if (d[el.name]) el.value = d[el.name]; }); } catch (e) {} }
+    restore();
+    document.addEventListener('input', function(e){ if (e.target.classList && e.target.classList.contains('wi')) save(); });
+    // Print swaps this tab for the printable copy (so the browser shows its
+    // full print dialog) and its Back link brings the draft back.
+    document.getElementById('ag-print').addEventListener('click', function(){ save(); document.getElementById('ag-print-form').submit(); });
     function tagEmpty(){ document.querySelectorAll('.wi').forEach(function(el){ el.classList.toggle('is-empty', !el.value); }); }
     window.addEventListener('beforeprint', tagEmpty); tagEmpty();
     document.addEventListener('input', function(e){ if (e.target.classList && e.target.classList.contains('wi')) e.target.classList.toggle('is-empty', !e.target.value); });

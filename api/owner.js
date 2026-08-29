@@ -1486,7 +1486,7 @@ export default async function handler(req, res) {
         };
         const empty = !Object.values(b).some(Boolean);
         res.setHeader("Cache-Control", "no-store");
-        return html(200, contractHtml(empty ? {} : b, { paper: !empty, blank: empty, autoPrint: body.print === "1" }));
+        return html(200, contractHtml(empty ? {} : b, { paper: !empty, blank: empty, autoPrint: body.print === "1", backHref: navHref("agreement") }));
       }
 
       const proto = req.headers["x-forwarded-proto"] || (String(req.headers.host || "").includes("localhost") ? "http" : "https");
