@@ -168,13 +168,26 @@ input:focus, textarea:focus {
   }
 }
 
-/* Google Places box inside Sky's booking card: match the other inputs. */
+/* Google Places box inside Sky's booking card: styled to sit next to the
+   other inputs (1px navy/15 border, 12px radius, 14px text, 38px tall).
+   The element's inner input lives in a closed shadow root, so its text size
+   is brought down with zoom; the height and radius below are the intended
+   38px / 12px divided by that zoom. */
 .fp-places gmp-place-autocomplete {
+  display: block;
   width: 100%;
-  --gmp-mat-color-surface: #fff;
-  --gmp-mat-color-on-surface: #1f2a44;
-  --gmp-mat-color-primary: #e8836b;
-  --gmp-mat-font-family: inherit;
-  --gmp-mat-font-size: 14px;
+  zoom: 0.875;
+  height: 43.4px;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid rgba(33, 26, 25, 0.15);
+  border-radius: 13.7px;
+  background: #fff;
   font-family: inherit;
+  --gmp-mat-color-surface: #fff;
+  --gmp-mat-color-on-surface: #211a19;
+  --gmp-mat-color-on-surface-variant: rgba(33, 26, 25, 0.45);
+  --gmp-mat-color-primary: #e85555;
+  --gmp-mat-color-outline: transparent;
+  --gmp-mat-font-family: inherit;
 }
