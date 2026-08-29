@@ -285,21 +285,23 @@ const SHOW_DATE_PICKER_TOOL = {
 const SHOW_TIME_PICKER_TOOL = {
   name: "show_time_picker",
   description:
-    "Shows tappable start times under your message, plus an 'Another time' option for anything not on the list. Use when asking what time the event starts. Pass the package length so the card can show the client the finish time too. For festivals and crowded events pass range: true instead: the card then asks for the start AND the finish time in one go and replies with both plus the number of hours, so you never have to ask when it ends.",
+    "Shows tappable times under your message. Two modes, and you MUST pick one: mode 'range' asks the client for the start AND finish time in one card and replies with both plus the hours (e.g. '11:00 AM to 3:00 PM (4 hours)'). Use 'range' for festivals, fairs, school carnivals, community events, and any crowded event where the client decides how long the artist is there, so you never have to ask when it ends. Mode 'start' shows start times only and works out the finish from the package length; use it for birthdays and parties where you already picked the hours.",
   input_schema: {
     type: "object",
     properties: {
+      mode: {
+        type: "string",
+        enum: ["range", "start"],
+        description:
+          "'range' = client picks start and finish (festivals, crowded events). 'start' = start time only, finish follows from hours (parties).",
+      },
       hours: {
         type: "number",
         description:
-          "The package length in hours, so the card can show the client the full range (e.g. 2:00 PM to 4:00 PM). Defaults to 2 if you don't know it yet. Ignored when range is true.",
-      },
-      range: {
-        type: "boolean",
-        description:
-          "Set true for festivals and crowded events, where the client chooses the start and finish time themselves. The card collects both and the hours come from the client's answer.",
+          "Only for mode 'start': the package length in hours, so the card can show the full range (e.g. 2:00 PM to 4:00 PM). Defaults to 2.",
       },
     },
+    required: ["mode"],
   },
 };
 
@@ -368,7 +370,9 @@ const WIDGET_TOOLS = {
   show_time_picker: (input) => ({
     type: "time_picker",
     hours: Number(input.hours) > 0 ? Number(input.hours) : 2,
-    range: input.range === true,
+    // Range unless Sky explicitly asked for start-only: if she forgets the
+    // mode, one extra tap for the finish time beats a second question.
+    range: input.mode === "range" || input.range === true || (input.mode !== "start" && !(Number(input.hours) > 0)),
   }),
   show_quote: (input) => {
     const ui = {
